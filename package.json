@@ -1,0 +1,17 @@
+{
+  "name": "foliage-arsenic",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "postinstall": "spago install",
+    "build": "spago build"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "devDependencies": {
+    "purescript": "^0.15.15",
+    "spago": "^0.21.0"
+  }
+}
