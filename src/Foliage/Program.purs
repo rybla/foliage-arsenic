@@ -15,35 +15,41 @@ import Data.Show.Generic (genericShow)
 import Data.Traversable (class Traversable, traverse)
 import Data.Tuple.Nested (type (/\), (/\))
 
-data Program
+type Program
+  = ProgramF LatticeType
+
+data ProgramF ty
   = Program
-    { modules :: Map Name Module
+    { modules :: Map Name (ModuleF ty)
     }
 
-derive instance _Generic_Program :: Generic Program _
+derive instance _Generic_Program :: Generic (ProgramF ty) _
 
-instance _Eq_Program :: Eq Program where
+instance _Eq_Program :: Eq ty => Eq (ProgramF ty) where
   eq x = genericEq x
 
-instance _Show_Program :: Show Program where
+instance _Show_Program :: Show ty => Show (ProgramF ty) where
   show x = genericShow x
 
-data Module
+type Module
+  = ModuleF LatticeType
+
+data ModuleF ty
   = Module
-    { name :: String
+    { name :: Name
     , dataTypeDefs :: Map Name DataTypeDef
     , latticeTypeDefs :: Map Name LatticeTypeDef
     , functionDefs :: Map Name FunctionDef
     , relations :: Map Name Relation
-    , rules :: Map Name Rule
+    , rules :: Map Name (RuleF ty)
     }
 
-derive instance _Generic_Module :: Generic Module _
+derive instance _Generic_Module :: Generic (ModuleF ty) _
 
-instance _Eq_Module :: Eq Module where
+instance _Eq_Module :: Eq ty => Eq (ModuleF ty) where
   eq x = genericEq x
 
-instance _Show_Module :: Show Module where
+instance _Show_Module :: Show ty => Show (ModuleF ty) where
   show x = genericShow x
 
 data DataTypeDef
@@ -154,19 +160,22 @@ instance _Eq_Relation :: Eq Relation where
 instance _Show_Relation :: Show Relation where
   show x = genericShow x
 
-data Rule
+type Rule
+  = RuleF LatticeType
+
+data RuleF ty
   = Rule
     { params :: Map Name LatticeType
-    , hypotheses :: List Prop
-    , conclusion :: Prop
+    , hypotheses :: List (PropF ty Name)
+    , conclusion :: PropF ty Name
     }
 
-derive instance _Generic_Rule :: Generic Rule _
+derive instance _Generic_Rule :: Generic (RuleF ty) _
 
-instance _Eq_Rule :: Eq Rule where
+instance _Eq_Rule :: Eq ty => Eq (RuleF ty) where
   eq x = genericEq x
 
-instance _Show_Rule :: Show Rule where
+instance _Show_Rule :: Show ty => Show (RuleF ty) where
   show x = genericShow x
 
 type NoParamsNorHypothesisRule
@@ -204,52 +213,52 @@ nextHypothesis (Rule rule) = case rule.hypotheses of
   Cons p ps -> Right (p /\ Rule rule { hypotheses = ps })
 
 type Prop
-  = PropX Name
+  = PropF LatticeType Name
 
 type ConcreteProp
-  = PropX Void
+  = PropF LatticeType Void
 
-data PropX x
-  = Prop Name (TermX x)
+data PropF ty x
+  = Prop Name (TermF ty x)
 
-derive instance _Generic_PropX :: Generic (PropX x) _
+derive instance _Generic_PropF :: Generic (PropF ty x) _
 
-derive instance _Functor_PropX :: Functor PropX
+derive instance _Functor_PropF :: Functor (PropF ty)
 
-derive instance _Foldable_PropX :: Foldable PropX
+derive instance _Foldable_PropF :: Foldable (PropF ty)
 
-derive instance _Traversable_PropX :: Traversable PropX
+derive instance _Traversable_PropF :: Traversable (PropF ty)
 
-instance _Eq_PropX :: Eq x => Eq (PropX x) where
+instance _Eq_PropF :: (Eq ty, Eq x) => Eq (PropF ty x) where
   eq x = genericEq x
 
-instance _Show_PropX :: Show x => Show (PropX x) where
+instance _Show_PropF :: (Show ty, Show x) => Show (PropF ty x) where
   show x = genericShow x
 
 type Term
-  = TermX Name
+  = TermF LatticeType Name
 
-data TermX x
-  = VarTerm x
-  | UnitTerm
-  | LeftTerm (TermX x)
-  | RightTerm (TermX x)
-  | PairTerm (TermX x) (TermX x)
-  | SetTerm (Array (TermX x))
+data TermF ty x
+  = VarTerm ty x
+  | UnitTerm ty
+  | LeftTerm ty (TermF ty x)
+  | RightTerm ty (TermF ty x)
+  | PairTerm ty (TermF ty x) (TermF ty x)
+  | SetTerm ty (Array (TermF ty x))
 
-derive instance _Generic_TermX :: Generic (TermX x) _
+derive instance _Generic_TermF :: Generic (TermF ty x) _
 
-instance _Eq_Term :: Eq x => Eq (TermX x) where
+instance _Eq_Term :: (Eq ty, Eq x) => Eq (TermF ty x) where
   eq x = genericEq x
 
-instance _Show_Term :: Show x => Show (TermX x) where
+instance _Show_Term :: (Show ty, Show x) => Show (TermF ty x) where
   show x = genericShow x
 
-derive instance _Functor_TermX :: Functor TermX
+derive instance _Functor_TermF :: Functor (TermF ty)
 
-derive instance _Foldable_TermX :: Foldable TermX
+derive instance _Foldable_TermF :: Foldable (TermF ty)
 
-derive instance _Traversable_TermX :: Traversable TermX
+derive instance _Traversable_TermF :: Traversable (TermF ty)
 
 type TermSubst
   = Map Name Term
@@ -273,17 +282,17 @@ substProp :: forall m. MonadThrow Err m => TermSubst -> Prop -> m Prop
 substProp sigma (Prop p t) = Prop p <$> substTerm sigma t
 
 substTerm :: forall m. MonadThrow Err m => TermSubst -> Term -> m Term
-substTerm sigma (VarTerm x) = Map.lookup x sigma # fromMaybe (VarTerm x) # pure
+substTerm sigma (VarTerm lty x) = Map.lookup x sigma # fromMaybe (VarTerm lty x) # pure
 
-substTerm _sigma UnitTerm = UnitTerm # pure
+substTerm _sigma (UnitTerm lty) = UnitTerm lty # pure
 
-substTerm sigma (LeftTerm t) = LeftTerm <$> substTerm sigma t
+substTerm sigma (LeftTerm lty t) = LeftTerm lty <$> substTerm sigma t
 
-substTerm sigma (RightTerm t) = RightTerm <$> substTerm sigma t
+substTerm sigma (RightTerm lty t) = RightTerm lty <$> substTerm sigma t
 
-substTerm sigma (PairTerm s t) = PairTerm <$> substTerm sigma s <*> substTerm sigma t
+substTerm sigma (PairTerm lty s t) = PairTerm lty <$> substTerm sigma s <*> substTerm sigma t
 
-substTerm sigma (SetTerm ts) = SetTerm <$> traverse (substTerm sigma) ts
+substTerm sigma (SetTerm lty ts) = SetTerm lty <$> traverse (substTerm sigma) ts
 
 newtype Name
   = Name String

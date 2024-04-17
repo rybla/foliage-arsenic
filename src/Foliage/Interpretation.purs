@@ -10,7 +10,7 @@ import Control.Monad.Error.Class (class MonadThrow, throwError)
 import Control.Monad.Except (Except, ExceptT, runExceptT, throwError)
 import Control.Monad.Maybe.Trans (MaybeT, runMaybeT)
 import Control.Monad.Reader (class MonadAsk, ReaderT, ask, runReaderT)
-import Control.Monad.State (class MonadState, StateT, evalStateT, get, modify, modify_, runStateT)
+import Control.Monad.State (class MonadState, StateT, evalStateT, execStateT, get, modify, modify_, runStateT)
 import Control.MonadPlus (class MonadPlus)
 import Control.Plus (class Plus, empty)
 import Data.Array as Array
@@ -55,7 +55,9 @@ enqueue_active_rule ::
   forall m.
   MonadState Env m =>
   Rule -> m Unit
-enqueue_active_rule rule = modify_ (Record.modify (Proxy :: Proxy "active_rules") (Cons rule))
+enqueue_active_rule rule =
+  modify_
+    (Record.modify (Proxy :: Proxy "active_rules") (Cons rule))
 
 dequeue_active_rule ::
   forall m.
@@ -74,7 +76,7 @@ dequeue_active_rule = do
 interpProgram ::
   forall m.
   MonadThrow Err m =>
-  Program -> m Unit
+  Program -> m (List ConcreteProp)
 interpProgram (Program prog) = do
   Module main <- lookup "module Main" mainModuleName prog.modules
   let
@@ -95,10 +97,11 @@ interpProgram (Program prog) = do
             # List.filter (fromNoParamsNorHypothesesRule >>> isJust)
       , concreteProps: Nil
       }
-  interpFocusModule
-    # flip runReaderT ctx
-    # flip evalStateT env
-  pure unit
+  env <-
+    interpFocusModule
+      # flip runReaderT ctx
+      # flip execStateT env
+  pure env.concreteProps
 
 --------------------------------------------------------------------------------
 -- interpretation internals
@@ -202,20 +205,20 @@ matchTerm ::
   MonadThrow Err m =>
   MonadPlus m =>
   Term -> Term -> m TermSubst
-matchTerm (VarTerm x1) t2 = Map.singleton x1 t2 # pure
+matchTerm (VarTerm lty x1) t2 = Map.singleton x1 t2 # pure
 
-matchTerm UnitTerm UnitTerm = Map.empty # pure
+matchTerm (UnitTerm lty1) (UnitTerm lty2) = Map.empty # pure
 
-matchTerm (LeftTerm t1) (LeftTerm t2) = matchTerm t1 t2
+matchTerm (LeftTerm lty1 t1) (LeftTerm lty2 t2) = matchTerm t1 t2
 
-matchTerm (RightTerm t1) (RightTerm t2) = matchTerm t1 t2
+matchTerm (RightTerm lty1 t1) (RightTerm lty2 t2) = matchTerm t1 t2
 
-matchTerm (PairTerm s1 t1) (PairTerm s2 t2) = do
+matchTerm (PairTerm lty1 s1 t1) (PairTerm lty2 s2 t2) = do
   sigma1 <- matchTerm s1 s2
   t2 <- substTerm sigma1 t2
   matchTerm t1 t2
 
-matchTerm (SetTerm t1) (SetTerm t2) = todo "matchTerm SetTerm"
+matchTerm (SetTerm lty1 t1) (SetTerm lty2 t2) = todo "matchTerm SetTerm"
 
 matchTerm _ _ = empty
 
@@ -228,7 +231,7 @@ assertConcreteProp prop =
           , description: "Expected to be a concrete proposition, but the variable " <> show (show x) <> " appeared in the prop " <> show (show prop) <> "."
           }
 
-fromConcreteProp :: forall x. ConcreteProp -> PropX x
+fromConcreteProp :: forall x. ConcreteProp -> PropF LatticeType x
 fromConcreteProp = map absurd
 
 --------------------------------------------------------------------------------

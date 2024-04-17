@@ -13,6 +13,7 @@
   , "partial"
   , "prelude"
   , "record"
+  , "spec"
   , "transformers"
   , "tuples"
   , "unordered-collections"
