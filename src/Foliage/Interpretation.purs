@@ -2,7 +2,9 @@ module Foliage.Interpretation where
 
 import Control.Monad.Trans.Class
 import Data.Tuple.Nested
+import Foliage.Program
 import Prelude
+import Control.Apply (lift2)
 import Control.Bind (bindFlipped)
 import Control.Monad.Error.Class (class MonadThrow, throwError)
 import Control.Monad.Except (Except, ExceptT, runExceptT, throwError)
@@ -21,7 +23,6 @@ import Data.Maybe (Maybe(..), isJust)
 import Data.Set as Set
 import Data.Traversable (traverse, traverse_)
 import Effect.Aff (Aff)
-import Foliage.Program (Module(..), Name(..), Program(..), Prop(..), Rule(..), Term, fromNoHypothesesRule, fromNoParamsNorHypothesesRule, mainModuleName, nextHypothesis)
 import Partial.Unsafe (unsafeCrashWith)
 import Record as Record
 import Type.Proxy (Proxy(..))
@@ -41,12 +42,12 @@ type Ctx
 -- |   to try next
 type Env
   = { active_rules :: List Rule
+    , concreteProps :: List ConcreteProp
     }
 
-type Err
-  = { source :: String
-    , description :: String
-    }
+_active_rules = Proxy :: Proxy "active_rules"
+
+_concreteProps = Proxy :: Proxy "concreteProps"
 
 -- TODO: actually this should _merge_ with active_rules, so that only
 -- non-subsumed rules exist in the resulting active_rules
@@ -92,6 +93,7 @@ interpProgram (Program prog) = do
           main.rules
             # Map.values
             # List.filter (fromNoParamsNorHypothesesRule >>> isJust)
+      , concreteProps: Nil
       }
   interpFocusModule
     # flip runReaderT ctx
@@ -121,78 +123,113 @@ fixpointFocusModule ::
 fixpointFocusModule =
   execMaybeT do
     active_rule <- dequeue_active_rule # fromJustT
-    fixpointFocusModule_loop active_rule
+    loop active_rule
     fixpointFocusModule
+  where
+  -- Throw means break loop.
+  loop ::
+    forall m.
+    MonadAsk Ctx m =>
+    MonadState Env m =>
+    MonadThrow Err m =>
+    Rule -> m Unit
+  loop active_rule =
+    execMaybeT do
+      { rules } <- ask
+      -- check if `active_rule` has at least one hypothesis
+      case nextHypothesis active_rule of
+        -- `active_rule` has no hypotheses
+        Left { params, conclusion } -> learnProp conclusion
+        -- `active_rule` has at least one hypothesis
+        Right (hypothesis /\ active_rule) -> do
+          -- apply active rule to `rules` by trying to immediately derive 
+          -- `hypothesis`
+          rules
+            # traverse_ \rule -> do
+                -- require `rule` has no hypotheses
+                rule <- fromNoHypothesesRule rule # pure # fromJustT
+                -- require that `hypothesis` matches `rule.conclusion` via
+                -- substitution `sigma`, so we can use `rule` to instantiate
+                -- hypothesis, yielding a new `active_rule`
+                sigma <- matchProp hypothesis rule.conclusion
+                substRule sigma active_rule # lift >>= enqueue_active_rule >>> lift
 
--- | Throw means break loop.
-fixpointFocusModule_loop ::
-  forall m.
-  MonadAsk Ctx m =>
-  MonadState Env m =>
-  MonadThrow Err m =>
-  Rule -> m Unit
-fixpointFocusModule_loop active_rule =
-  execMaybeT do
-    { rules } <- ask
-    case nextHypothesis active_rule of
-      Left { params, conclusion } -> do
-        -- apply `rules` to `conclusion`
-        rules
-          # traverse_ \rule -> do
-              rule <- applyRule rule conclusion # lift # fromJustT
-              enqueue_active_rule rule # lift
-        pure unit
-      Right (hypothesis /\ active_rule) -> do
-        -- apply active rule to `rules` by trying to immediately derive 
-        -- `hypothesis`
-        rules
-          # traverse_ \rule -> do
-              -- require `rule` has no hypotheses
-              rule <- fromNoHypothesesRule rule # pure # fromJustT
-              -- require that `hypothesis` matches `rule.conclusion` via
-              -- substitution `sigma`, so we can use `rule` to instantiate
-              -- hypothesis, yielding a new `active_rule`
-              sigma <- matchProp hypothesis rule.conclusion # pure # fromJustT
-              substRule sigma active_rule # lift >>= enqueue_active_rule >>> lift
+learnProp :: forall m. MonadAsk Ctx m => MonadState Env m => MonadThrow Err m => Prop -> m Unit
+learnProp prop = do
+  concreteProp <- assertConcreteProp prop
+  -- insert prop into `concreteProps`
+  modify_ (Record.modify _concreteProps (Cons concreteProp))
+  { rules } <- ask
+  -- enqueue any rules that result from applying a rule to `prop`
+  rules
+    # traverse_ \rule -> do
+        applyRule rule prop
+          >>= case _ of
+              Nothing -> pure unit
+              Just rule -> enqueue_active_rule rule
 
+-- pure unit
 applyRule ::
   forall m.
   MonadThrow Err m =>
   Rule -> Prop -> m (Maybe Rule)
 applyRule rule prop = case nextHypothesis rule of
   Left _ -> pure Nothing
-  Right (hyp /\ rule) -> case matchProp hyp prop of
-    Nothing -> pure Nothing
-    Just sigma -> do
-      rule <- substRule sigma rule
-      pure (Just rule)
-
-type TermSubst
-  = Map Name Term
+  Right (hyp /\ rule) ->
+    matchProp hyp prop # runMaybeT
+      >>= case _ of
+          Nothing -> pure Nothing
+          Just sigma -> do
+            rule <- substRule sigma rule
+            pure (Just rule)
 
 -- | Variables in the left prop will be substituted for variables in the right
--- | prop. In other words, the left is _expected_ and the right prop is
--- | _actual_.
-matchProp :: Prop -> Prop -> Maybe TermSubst
-matchProp p1 p2 = Nothing
-
-substRule ::
+-- | prop. In other words, the left is _expected_ and the right is _actual_.
+matchProp ::
   forall m.
   MonadThrow Err m =>
-  TermSubst -> Rule -> m Rule
-substRule sigma (Rule rule) = do
-  unless (Map.keys sigma `Set.subset` Map.keys rule.params) do
-    throwError
-      { source: "substRule"
-      , description: "all variables in `sigma` must appear in `rule.params`"
-      }
-  params <- pure (rule.params `Map.difference` sigma)
-  hypotheses <- rule.hypotheses # traverse (substProp sigma)
-  conclusion <- rule.conclusion # substProp sigma
-  pure (Rule { params, hypotheses, conclusion })
+  MonadPlus m =>
+  Prop -> Prop -> m TermSubst
+matchProp (Prop p1 t1) (Prop p2 t2)
+  | p1 == p2 = matchTerm t1 t2
 
-substProp :: forall m. MonadThrow Err m => TermSubst -> Prop -> m Prop
-substProp = todo "substProp"
+matchProp (Prop p1 t1) (Prop p2 t2) = empty
+
+-- | Variables in the left term will be substituted for variables in the right
+-- | term. In other words, the left is _expected_ and the right is _actual_.
+matchTerm ::
+  forall m.
+  MonadThrow Err m =>
+  MonadPlus m =>
+  Term -> Term -> m TermSubst
+matchTerm (VarTerm x1) t2 = Map.singleton x1 t2 # pure
+
+matchTerm UnitTerm UnitTerm = Map.empty # pure
+
+matchTerm (LeftTerm t1) (LeftTerm t2) = matchTerm t1 t2
+
+matchTerm (RightTerm t1) (RightTerm t2) = matchTerm t1 t2
+
+matchTerm (PairTerm s1 t1) (PairTerm s2 t2) = do
+  sigma1 <- matchTerm s1 s2
+  t2 <- substTerm sigma1 t2
+  matchTerm t1 t2
+
+matchTerm (SetTerm t1) (SetTerm t2) = todo "matchTerm SetTerm"
+
+matchTerm _ _ = empty
+
+assertConcreteProp :: forall m. MonadThrow Err m => Prop -> m ConcreteProp
+assertConcreteProp prop =
+  prop
+    # traverse \x ->
+        throwError
+          { source: "assertConcreteProp"
+          , description: "Expected to be a concrete proposition, but the variable " <> show (show x) <> " appeared in the prop " <> show (show prop) <> "."
+          }
+
+fromConcreteProp :: forall x. ConcreteProp -> PropX x
+fromConcreteProp = map absurd
 
 --------------------------------------------------------------------------------
 -- miscellaneous

@@ -1,14 +1,18 @@
 module Foliage.Program where
 
 import Prelude
+import Control.Monad.Error.Class (class MonadThrow, throwError)
 import Data.Either (Either(..))
 import Data.Eq.Generic (genericEq)
-import Data.Foldable (null)
+import Data.Foldable (class Foldable, null)
 import Data.Generic.Rep (class Generic)
 import Data.List (List(..))
 import Data.Map (Map)
-import Data.Maybe (Maybe(..))
+import Data.Map as Map
+import Data.Maybe (Maybe(..), fromMaybe)
+import Data.Set as Set
 import Data.Show.Generic (genericShow)
+import Data.Traversable (class Traversable, traverse)
 import Data.Tuple.Nested (type (/\), (/\))
 
 data Program
@@ -199,32 +203,87 @@ nextHypothesis (Rule rule) = case rule.hypotheses of
   Nil -> Left { params: rule.params, conclusion: rule.conclusion }
   Cons p ps -> Right (p /\ Rule rule { hypotheses = ps })
 
-data Prop
-  = Prop Name Term
+type Prop
+  = PropX Name
 
-derive instance _Generic_Prop :: Generic Prop _
+type ConcreteProp
+  = PropX Void
 
-instance _Eq_Prop :: Eq Prop where
+data PropX x
+  = Prop Name (TermX x)
+
+derive instance _Generic_PropX :: Generic (PropX x) _
+
+derive instance _Functor_PropX :: Functor PropX
+
+derive instance _Foldable_PropX :: Foldable PropX
+
+derive instance _Traversable_PropX :: Traversable PropX
+
+instance _Eq_PropX :: Eq x => Eq (PropX x) where
   eq x = genericEq x
 
-instance _Show_Prop :: Show Prop where
+instance _Show_PropX :: Show x => Show (PropX x) where
   show x = genericShow x
 
-data Term
-  = VarTerm Name
+type Term
+  = TermX Name
+
+data TermX x
+  = VarTerm x
   | UnitTerm
-  | LeftTerm Term
-  | RightTerm Term
-  | PairTerm Term Term
-  | SetTerm (Array Term)
+  | LeftTerm (TermX x)
+  | RightTerm (TermX x)
+  | PairTerm (TermX x) (TermX x)
+  | SetTerm (Array (TermX x))
 
-derive instance _Generic_Term :: Generic Term _
+derive instance _Generic_TermX :: Generic (TermX x) _
 
-instance _Eq_Term :: Eq Term where
+instance _Eq_Term :: Eq x => Eq (TermX x) where
   eq x = genericEq x
 
-instance _Show_Term :: Show Term where
+instance _Show_Term :: Show x => Show (TermX x) where
   show x = genericShow x
+
+derive instance _Functor_TermX :: Functor TermX
+
+derive instance _Foldable_TermX :: Foldable TermX
+
+derive instance _Traversable_TermX :: Traversable TermX
+
+type TermSubst
+  = Map Name Term
+
+substRule ::
+  forall m.
+  MonadThrow Err m =>
+  TermSubst -> Rule -> m Rule
+substRule sigma (Rule rule) = do
+  unless (Map.keys sigma `Set.subset` Map.keys rule.params) do
+    throwError
+      { source: "substRule"
+      , description: "all variables in `sigma` must appear in `rule.params`"
+      }
+  params <- pure (rule.params `Map.difference` sigma)
+  hypotheses <- rule.hypotheses # traverse (substProp sigma)
+  conclusion <- rule.conclusion # substProp sigma
+  pure (Rule { params, hypotheses, conclusion })
+
+substProp :: forall m. MonadThrow Err m => TermSubst -> Prop -> m Prop
+substProp sigma (Prop p t) = Prop p <$> substTerm sigma t
+
+substTerm :: forall m. MonadThrow Err m => TermSubst -> Term -> m Term
+substTerm sigma (VarTerm x) = Map.lookup x sigma # fromMaybe (VarTerm x) # pure
+
+substTerm _sigma UnitTerm = UnitTerm # pure
+
+substTerm sigma (LeftTerm t) = LeftTerm <$> substTerm sigma t
+
+substTerm sigma (RightTerm t) = RightTerm <$> substTerm sigma t
+
+substTerm sigma (PairTerm s t) = PairTerm <$> substTerm sigma s <*> substTerm sigma t
+
+substTerm sigma (SetTerm ts) = SetTerm <$> traverse (substTerm sigma) ts
 
 newtype Name
   = Name String
@@ -237,3 +296,8 @@ derive newtype instance _Show_Name :: Show Name
 
 mainModuleName :: Name
 mainModuleName = Name "Main"
+
+type Err
+  = { source :: String
+    , description :: String
+    }
