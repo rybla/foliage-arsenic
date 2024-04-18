@@ -1,8 +1,6 @@
 module Foliage.Program where
 
 import Prelude
-import Control.Alternative (guard)
-import Control.Monad.Error.Class (class MonadThrow)
 import Data.Either (Either(..))
 import Data.Eq.Generic (genericEq)
 import Data.Foldable (class Foldable, null)
@@ -12,45 +10,39 @@ import Data.Map (Map)
 import Data.Map as Map
 import Data.Maybe (Maybe(..), fromMaybe)
 import Data.Show.Generic (genericShow)
-import Data.Traversable (class Traversable, traverse)
+import Data.Traversable (class Traversable)
 import Data.Tuple.Nested (type (/\), (/\))
 import Partial.Unsafe (unsafeCrashWith)
 
-type Program
-  = ProgramF LatticeType
-
-data ProgramF ty
+data Program
   = Program
-    { modules :: Map Name (ModuleF ty)
+    { modules :: Map Name Module
     }
 
-derive instance _Generic_Program :: Generic (ProgramF ty) _
+derive instance _Generic_Program :: Generic Program _
 
-instance _Eq_Program :: Eq ty => Eq (ProgramF ty) where
+instance _Eq_Program :: Eq Program where
   eq x = genericEq x
 
-instance _Show_Program :: Show ty => Show (ProgramF ty) where
+instance _Show_Program :: Show Program where
   show x = genericShow x
 
-type Module
-  = ModuleF LatticeType
-
-data ModuleF ty
+data Module
   = Module
     { name :: Name
     , dataTypeDefs :: Map Name DataTypeDef
     , latticeTypeDefs :: Map Name LatticeTypeDef
     , functionDefs :: Map Name FunctionDef
     , relations :: Map Name Relation
-    , rules :: Map Name (RuleF ty)
+    , rules :: Map Name Rule
     }
 
-derive instance _Generic_Module :: Generic (ModuleF ty) _
+derive instance _Generic_Module :: Generic Module _
 
-instance _Eq_Module :: Eq ty => Eq (ModuleF ty) where
+instance _Eq_Module :: Eq Module where
   eq x = genericEq x
 
-instance _Show_Module :: Show ty => Show (ModuleF ty) where
+instance _Show_Module :: Show Module where
   show x = genericShow x
 
 data DataTypeDef
@@ -121,7 +113,7 @@ instance _Show_SumLatticeTypeOrdering :: Show SumLatticeTypeOrdering where
   show x = genericShow x
 
 data ProductLatticeTypeOrdering
-  = ProductLatticeTypeOrdering
+  = FirstThenSecond_ProductLatticeTypeOrdering
 
 derive instance _Generic_ProductLatticeTypeOrdering :: Generic ProductLatticeTypeOrdering _
 
@@ -166,21 +158,18 @@ instance _Eq_Relation :: Eq Relation where
 instance _Show_Relation :: Show Relation where
   show x = genericShow x
 
-type Rule
-  = RuleF LatticeType
-
-data RuleF ty
+data Rule
   = Rule
-    { hypotheses :: List (PropF ty Name)
-    , conclusion :: PropF ty Name
+    { hypotheses :: List (PropF Name)
+    , conclusion :: PropF Name
     }
 
-derive instance _Generic_Rule :: Generic (RuleF ty) _
+derive instance _Generic_Rule :: Generic Rule _
 
-instance _Eq_Rule :: Eq ty => Eq (RuleF ty) where
+instance _Eq_Rule :: Eq Rule where
   eq x = genericEq x
 
-instance _Show_Rule :: Show ty => Show (RuleF ty) where
+instance _Show_Rule :: Show Rule where
   show x = genericShow x
 
 fromNoHypothesesRule :: Rule -> Maybe Prop
@@ -200,52 +189,52 @@ nextHypothesis (Rule rule) = case rule.hypotheses of
   Cons p ps -> Right (p /\ Rule rule { hypotheses = ps })
 
 type Prop
-  = PropF LatticeType Name
+  = PropF Name
 
 type ConcreteProp
-  = PropF LatticeType Void
+  = PropF Void
 
-data PropF ty x
-  = Prop Name (TermF ty x)
+data PropF x
+  = Prop Name (TermF x)
 
-derive instance _Generic_PropF :: Generic (PropF ty x) _
+derive instance _Generic_PropF :: Generic (PropF x) _
 
-derive instance _Functor_PropF :: Functor (PropF ty)
+derive instance _Functor_PropF :: Functor (PropF)
 
-derive instance _Foldable_PropF :: Foldable (PropF ty)
+derive instance _Foldable_PropF :: Foldable (PropF)
 
-derive instance _Traversable_PropF :: Traversable (PropF ty)
+derive instance _Traversable_PropF :: Traversable (PropF)
 
-instance _Eq_PropF :: (Eq ty, Eq x) => Eq (PropF ty x) where
+instance _Eq_PropF :: Eq x => Eq (PropF x) where
   eq x = genericEq x
 
-instance _Show_PropF :: (Show ty, Show x) => Show (PropF ty x) where
+instance _Show_PropF :: Show x => Show (PropF x) where
   show x = genericShow x
 
 type Term
-  = TermF LatticeType Name
+  = TermF Name
 
-data TermF ty x
-  = VarTerm ty x
-  | UnitTerm ty
-  | LeftTerm ty (TermF ty x)
-  | RightTerm ty (TermF ty x)
-  | PairTerm ty (TermF ty x) (TermF ty x)
-  | SetTerm ty (Array (TermF ty x))
+data TermF x
+  = VarTerm x
+  | UnitTerm
+  | LeftTerm (TermF x)
+  | RightTerm (TermF x)
+  | PairTerm (TermF x) (TermF x)
+  | SetTerm (Array (TermF x))
 
-derive instance _Generic_TermF :: Generic (TermF ty x) _
+derive instance _Generic_TermF :: Generic (TermF x) _
 
-instance _Eq_Term :: (Eq ty, Eq x) => Eq (TermF ty x) where
+instance _Eq_Term :: Eq x => Eq (TermF x) where
   eq x = genericEq x
 
-instance _Show_Term :: (Show ty, Show x) => Show (TermF ty x) where
+instance _Show_Term :: Show x => Show (TermF x) where
   show x = genericShow x
 
-derive instance _Functor_TermF :: Functor (TermF ty)
+derive instance _Functor_TermF :: Functor (TermF)
 
-derive instance _Foldable_TermF :: Foldable (TermF ty)
+derive instance _Foldable_TermF :: Foldable (TermF)
 
-derive instance _Traversable_TermF :: Traversable (TermF ty)
+derive instance _Traversable_TermF :: Traversable (TermF)
 
 type TermSubst
   = Map Name Term
@@ -261,62 +250,20 @@ substProp :: TermSubst -> Prop -> Prop
 substProp sigma (Prop p t) = Prop p (substTerm sigma t)
 
 substTerm :: TermSubst -> Term -> Term
-substTerm sigma (VarTerm lty x) = Map.lookup x sigma # fromMaybe (VarTerm lty x)
+substTerm sigma (VarTerm x) = Map.lookup x sigma # fromMaybe (VarTerm x)
 
-substTerm _sigma (UnitTerm lty) = UnitTerm lty
+substTerm _sigma UnitTerm = UnitTerm
 
-substTerm sigma (LeftTerm lty t) = LeftTerm lty (substTerm sigma t)
+substTerm sigma (LeftTerm t) = LeftTerm (substTerm sigma t)
 
-substTerm sigma (RightTerm lty t) = RightTerm lty (substTerm sigma t)
+substTerm sigma (RightTerm t) = RightTerm (substTerm sigma t)
 
-substTerm sigma (PairTerm lty s t) = PairTerm lty (substTerm sigma s) (substTerm sigma t)
+substTerm sigma (PairTerm s t) = PairTerm (substTerm sigma s) (substTerm sigma t)
 
-substTerm sigma (SetTerm lty ts) = SetTerm lty (ts <#> substTerm sigma)
-
-compareProp :: Prop -> Prop -> Maybe LatticeOrdering
-compareProp (Prop p1 t1) (Prop p2 t2) =
-  if p1 == p2 then
-    compareTerm t1 t2
-  else
-    Nothing
+substTerm sigma (SetTerm ts) = SetTerm (ts <#> substTerm sigma)
 
 freshName :: Unit -> Name
 freshName _ = unsafeCrashWith "freshName"
-
--- | Requires the terms to have the same type type.
-compareTerm :: Term -> Term -> Maybe LatticeOrdering
-compareTerm (VarTerm ty1 x1) (VarTerm ty2 x2) =
-  Equal
-    ( Map.fromFoldable
-        [ x1 /\ VarTerm ty1 (freshName unit)
-        , x2 /\ VarTerm ty2 (freshName unit)
-        ]
-    )
-    # Just
-
-compareTerm (VarTerm ty1 x1) t2 =
-  GreaterThan
-    (Map.singleton x1 t2)
-    # Just
-
-compareTerm t1 (VarTerm ty2 x2) =
-  LessThan
-    (Map.singleton x2 t1)
-    # Just
-
-compareTerm (UnitTerm _) (UnitTerm _) =
-  Equal Map.empty
-    # Just
-
-compareTerm (LeftTerm _ t1) (LeftTerm _ t2) = compareTerm t1 t2
-
-compareTerm (LeftTerm _ t1) (RightTerm _ t2) = compareTerm t1 t2
-
-compareTerm (RightTerm _ t1) (LeftTerm _ t2) = compareTerm t1 t2
-
-compareTerm (RightTerm _ t1) (RightTerm _ t2) = compareTerm t1 t2
-
-compareTerm t1 t2 = unsafeCrashWith "comapreTerm"
 
 -- | LatticeOrdering:
 -- | - `a = b` if there exists a substitution of `a` and a substitution of `b`

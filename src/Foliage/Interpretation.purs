@@ -5,7 +5,7 @@ import Prelude
 import Control.Monad.Error.Class (class MonadThrow)
 import Control.Monad.Except (throwError)
 import Control.Monad.Maybe.Trans (MaybeT, runMaybeT)
-import Control.Monad.Reader (class MonadAsk, runReaderT)
+import Control.Monad.Reader (class MonadAsk, ask, runReaderT)
 import Control.Monad.State (class MonadState, execStateT, get, modify_)
 import Control.MonadPlus (class MonadPlus)
 import Control.Plus (empty)
@@ -42,6 +42,7 @@ type Env
   = { active_rules :: List Rule
     , concreteProps :: List ConcreteProp
     , abstractProps :: List Prop
+    , props :: List Prop
     }
 
 _active_rules = Proxy :: Proxy "active_rules"
@@ -93,6 +94,7 @@ interpProgram (Program prog) = do
       { active_rules: main.rules # Map.values
       , concreteProps: Nil
       , abstractProps: Nil
+      , props: Nil
       }
   env <-
     interpFocusModule
@@ -133,9 +135,7 @@ fixpointFocusModule_loop ::
   MonadThrow Err m =>
   Rule -> m Unit
 fixpointFocusModule_loop (Rule { hypotheses, conclusion }) = case hypotheses of
-  Nil -> case fromConcreteProp conclusion of
-    Nothing -> learnAbstractProp conclusion
-    Just conclusion -> learnConcreteProp conclusion
+  Nil -> learnProp conclusion
   hypothesis : hypotheses ->
     deriveProp hypothesis
       >>= traverse_ \{ sigma } -> do
@@ -145,90 +145,137 @@ fixpointFocusModule_loop (Rule { hypotheses, conclusion }) = case hypotheses of
 
 deriveProp ::
   forall m.
+  MonadAsk Ctx m =>
   MonadState Env m =>
+  MonadThrow Err m =>
   Prop -> m (List { prop :: Prop, sigma :: TermSubst })
 deriveProp prop = do
   -- look in concreteProps and abstractProps for any props that can satisfy
   -- `hypothesis`
   { concreteProps, abstractProps } <- get
-  ((concreteProps <#> toAbstractProp) <> abstractProps)
-    # List.foldr
-        ( \prop' results -> case compareProp prop prop' of
-            Just (LessThan sigma) -> { prop: prop', sigma } : results
-            _ -> results
+  let
+    props = (concreteProps <#> toAbstractProp) <> abstractProps
+  props
+    # List.foldM
+        ( \results prop' ->
+            (compareProp prop prop' # runMaybeT)
+              <#> case _ of
+                  Just (LessThan sigma) -> { prop: prop', sigma } : results
+                  _ -> results
         )
         Nil
+
+learnProp ::
+  forall m.
+  MonadState Env m =>
+  MonadAsk Ctx m =>
+  MonadThrow Err m =>
+  PropF Name -> m Unit
+learnProp prop = do
+  { props } <- get
+  keep_prop /\ props <-
+    props
+      # List.foldM
+          ( \(keep_prop /\ props) prop' ->
+              (compareProp prop prop' # runMaybeT)
+                <#> case _ of
+                    -- prop >< prop' ==> keep prop'
+                    Nothing -> (keep_prop /\ prop' : props)
+                    -- prop < prop' ==> prop is subsumed; keep prop'
+                    Just (LessThan _) -> (false /\ prop' : props)
+                    -- prop = prop' ==> prop is subsumed; keep prop'
+                    Just (Equal _) -> (false /\ prop' : props)
+                    -- prop > prop' ==> prop' is subsumed so drop prop'
+                    Just (GreaterThan _) -> (keep_prop /\ props)
+          )
+          (true /\ Nil)
+  modify_ _ { props = (if keep_prop then (prop : _) else identity) props }
+
+compareProp ::
+  forall m.
+  MonadAsk Ctx m =>
+  MonadPlus m =>
+  MonadThrow Err m =>
+  Prop -> Prop -> m LatticeOrdering
+compareProp (Prop p1 t1) (Prop p2 t2) = do
+  unless (p1 == p2) empty
+  { focusModule: Module { relations } } <- ask
+  domain <- case Map.lookup p1 relations of
+    Nothing ->
+      throwError
+        { source: "compareProp"
+        , description: "The relation " <> show (show p1) <> " does not exist in the focused module."
+        }
+    Just (Relation { domain }) -> pure domain
+  compareTerm domain t1 t2
+
+-- | Requires the terms to have the same type type.
+compareTerm ::
+  forall m.
+  MonadThrow Err m =>
+  MonadPlus m =>
+  LatticeType -> Term -> Term -> m LatticeOrdering
+compareTerm _lty (VarTerm x1) (VarTerm x2) =
+  Equal
+    ( Map.fromFoldable
+        [ x1 /\ VarTerm (freshName unit)
+        , x2 /\ VarTerm (freshName unit)
+        ]
+    )
     # pure
 
-learnConcreteProp ::
-  forall m.
-  MonadState Env m =>
-  ConcreteProp -> m Unit
-learnConcreteProp prop = do
-  { concreteProps } <- get
-  keep_prop /\ concreteProps <-
-    let
-      f prop' (keep_prop /\ concreteProps') = case compareProp (toAbstractProp prop) (toAbstractProp prop') of
-        -- prop >< prop' ==> keep prop'
-        Nothing -> (keep_prop /\ prop' : concreteProps')
-        -- prop < prop' ==> prop is subsumed; keep prop'
-        Just (LessThan _) -> (false /\ prop' : concreteProps')
-        -- prop = prop' ==> prop is subsumed; keep prop'
-        Just (Equal _) -> (false /\ prop' : concreteProps')
-        -- prop > prop' ==> prop' is subsumed so drop prop'
-        Just (GreaterThan _) -> (keep_prop /\ concreteProps')
-    in
-      concreteProps # List.foldr f (true /\ Nil) # pure
-  modify_ _ { concreteProps = (if keep_prop then (prop : _) else identity) concreteProps }
+compareTerm _lty (VarTerm x1) t2 = GreaterThan (Map.singleton x1 t2) # pure
 
-learnAbstractProp ::
-  forall m.
-  MonadState Env m =>
-  Prop -> m Unit
-learnAbstractProp prop = do
-  { abstractProps } <- get
-  keep_prop /\ abstractProps <-
-    let
-      f prop' (keep_prop /\ abstractProps') = case compareProp prop prop' of
-        -- prop >< prop' ==> keep prop'
-        Nothing -> (keep_prop /\ prop' : abstractProps')
-        -- prop < prop' ==> prop is subsumed; keep prop'
-        Just (LessThan _) -> (false /\ prop' : abstractProps')
-        -- prop = prop' ==> prop is subsumed; keep prop'
-        Just (Equal _) -> (false /\ prop' : abstractProps')
-        -- prop > prop' ==> prop' is subsumed so drop prop'
-        Just (GreaterThan _) -> (keep_prop /\ abstractProps')
-    in
-      abstractProps # List.foldr f (true /\ Nil) # pure
-  modify_ _ { abstractProps = (if keep_prop then (prop : _) else identity) abstractProps }
+compareTerm _lty t1 (VarTerm x2) = LessThan (Map.singleton x2 t1) # pure
 
--- -- | Variables in the left prop will be substituted for variables in the right
--- -- | prop. In other words, the left is _expected_ and the right is _actual_.
--- matchProp ::
---   forall m.
---   MonadThrow Err m =>
---   MonadPlus m =>
---   Prop -> Prop -> m TermSubst
--- matchProp (Prop p1 t1) (Prop p2 t2)
---   | p1 == p2 = matchTerm t1 t2
--- matchProp (Prop p1 t1) (Prop p2 t2) = empty
--- -- | Variables in the left term will be substituted for variables in the right
--- -- | term. In other words, the left is _expected_ and the right is _actual_.
--- matchTerm ::
---   forall m.
---   MonadThrow Err m =>
---   MonadPlus m =>
---   Term -> Term -> m TermSubst
--- matchTerm (VarTerm lty x1) t2 = Map.singleton x1 t2 # pure
--- matchTerm (UnitTerm lty1) (UnitTerm lty2) = Map.empty # pure
--- matchTerm (LeftTerm lty1 t1) (LeftTerm lty2 t2) = matchTerm t1 t2
--- matchTerm (RightTerm lty1 t1) (RightTerm lty2 t2) = matchTerm t1 t2
--- matchTerm (PairTerm lty1 s1 t1) (PairTerm lty2 s2 t2) = do
---   sigma1 <- matchTerm s1 s2
---   t2 <- substTerm sigma1 t2
---   matchTerm t1 t2
--- matchTerm (SetTerm lty1 t1) (SetTerm lty2 t2) = todo "matchTerm SetTerm"
--- matchTerm _ _ = empty
+compareTerm lty@UnitLatticeType t1 t2 = case t1 /\ t2 of
+  UnitTerm /\ UnitTerm -> Equal Map.empty # pure
+  _ -> throwError { source: "compareTerm", description: "type error; expected " <> show (show t1) <> " and " <> show (show t2) <> " to have the type " <> show (show lty) <> "." }
+
+compareTerm lty@(SumLatticeType LeftGreaterThanRight_SumLatticeTypeOrdering lty_left lty_right) t1 t2 = case t1 /\ t2 of
+  LeftTerm t1 /\ LeftTerm t2 -> compareTerm lty_left t1 t2
+  LeftTerm t1 /\ RightTerm t2 -> GreaterThan Map.empty # pure
+  RightTerm t1 /\ LeftTerm t2 -> LessThan Map.empty # pure
+  RightTerm t1 /\ RightTerm t2 -> compareTerm lty_right t1 t2
+  _ -> throwError { source: "compareTerm", description: "type error; expected " <> show (show t1) <> " and " <> show (show t2) <> " to have the type " <> show (show lty) <> "." }
+
+compareTerm lty@(SumLatticeType LeftLessThanRight_SumLatticeTypeOrdering lty_left lty_right) t1 t2 = case t1 /\ t2 of
+  LeftTerm t1 /\ LeftTerm t2 -> compareTerm lty_left t1 t2
+  LeftTerm t1 /\ RightTerm t2 -> LessThan Map.empty # pure
+  RightTerm t1 /\ LeftTerm t2 -> GreaterThan Map.empty # pure
+  RightTerm t1 /\ RightTerm t2 -> compareTerm lty_right t1 t2
+  _ -> throwError { source: "compareTerm", description: "type error; expected " <> show (show t1) <> " and " <> show (show t2) <> " to have the type " <> show (show lty) <> "." }
+
+compareTerm lty@(SumLatticeType LeftIncomparableRight_SumLatticeTypeOrdering lty_left lty_right) t1 t2 = case t1 /\ t2 of
+  LeftTerm t1 /\ LeftTerm t2 -> compareTerm lty_left t1 t2
+  LeftTerm t1 /\ RightTerm t2 -> empty
+  RightTerm t1 /\ LeftTerm t2 -> empty
+  RightTerm t1 /\ RightTerm t2 -> compareTerm lty_right t1 t2
+  _ -> throwError { source: "compareTerm", description: "type error; expected " <> show (show t1) <> " and " <> show (show t2) <> " to have the type " <> show (show lty) <> "." }
+
+compareTerm lty@(SumLatticeType LeftEqualRight_SumLatticeTypeOrdering lty_left lty_right) t1 t2 = case t1 /\ t2 of
+  LeftTerm t1 /\ LeftTerm t2 -> compareTerm lty_left t1 t2
+  LeftTerm t1 /\ RightTerm t2 -> Equal Map.empty # pure
+  RightTerm t1 /\ LeftTerm t2 -> Equal Map.empty # pure
+  RightTerm t1 /\ RightTerm t2 -> compareTerm lty_right t1 t2
+  _ -> throwError { source: "compareTerm", description: "type error; expected " <> show (show t1) <> " and " <> show (show t2) <> " to have the type " <> show (show lty) <> "." }
+
+compareTerm lty@(ProductLatticeType FirstThenSecond_ProductLatticeTypeOrdering lty_1 lty_2) t1 t2 = case t1 /\ t2 of
+  PairTerm t1_1 t1_2 /\ PairTerm t2_1 t2_2 ->
+    compareTerm lty_1 t1_1 t2_1
+      >>= case _ of
+          LessThan sigma -> LessThan sigma # pure
+          Equal sigma -> do
+            t1_2 <- substTerm sigma t1_2 # pure
+            t2_2 <- substTerm sigma t2_2 # pure
+            compareTerm lty_2 t1_2 t2_2
+          GreaterThan sigma -> GreaterThan sigma # pure
+  _ -> throwError { source: "compareTerm", description: "type error; expected " <> show (show t1) <> " and " <> show (show t2) <> " to have the type " <> show (show lty) <> "." }
+
+compareTerm lty@(SetLatticeType _ lty_elem) t1 t2 = Unsafe.todo "compareTerm SetLatticeType"
+
+compareTerm lty t1 t2 = unsafeCrashWith "compareTerm"
+
 assertConcreteProp :: forall m. MonadThrow Err m => Prop -> m ConcreteProp
 assertConcreteProp prop =
   prop
@@ -241,7 +288,7 @@ assertConcreteProp prop =
 fromConcreteProp :: Prop -> Maybe ConcreteProp
 fromConcreteProp prop = prop # traverse (const Nothing)
 
-toAbstractProp :: forall x. ConcreteProp -> PropF LatticeType x
+toAbstractProp :: forall x. ConcreteProp -> PropF x
 toAbstractProp = unsafeCoerce -- this is equivalent to `map absurd`
 
 --------------------------------------------------------------------------------
