@@ -14,6 +14,7 @@ import Data.Set as Set
 import Data.Show.Generic (genericShow)
 import Data.Traversable (class Traversable, traverse)
 import Data.Tuple.Nested (type (/\), (/\))
+import Partial.Unsafe (unsafeCrashWith)
 
 type Program
   = ProgramF LatticeType
@@ -94,6 +95,8 @@ data LatticeType
   | SumLatticeType SumOrdering LatticeType LatticeType
   | ProductLatticeType ProductOrdering LatticeType LatticeType
   | SetLatticeType SetOrdering LatticeType
+  | OppositeLatticeType LatticeType
+  | PowerLatticeType LatticeType
 
 derive instance _Generic_LatticeType :: Generic LatticeType _
 
@@ -293,6 +296,17 @@ substTerm sigma (RightTerm lty t) = RightTerm lty <$> substTerm sigma t
 substTerm sigma (PairTerm lty s t) = PairTerm lty <$> substTerm sigma s <*> substTerm sigma t
 
 substTerm sigma (SetTerm lty ts) = SetTerm lty <$> traverse (substTerm sigma) ts
+
+compareProp :: Prop -> Prop -> Maybe LatticeOrdering
+compareProp t1 t2 = unsafeCrashWith "TODO: compareProp"
+
+compareTerm :: Term -> Term -> Maybe LatticeOrdering
+compareTerm t1 t2 = unsafeCrashWith "TODO: compareTerm"
+
+data LatticeOrdering
+  = LessThan TermSubst
+  | GreaterThan TermSubst
+  | Equal
 
 newtype Name
   = Name String

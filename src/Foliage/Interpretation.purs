@@ -1,31 +1,26 @@
 module Foliage.Interpretation where
 
-import Control.Monad.Trans.Class
-import Data.Tuple.Nested
-import Foliage.Program
 import Prelude
-import Control.Apply (lift2)
-import Control.Bind (bindFlipped)
-import Control.Monad.Error.Class (class MonadThrow, throwError)
-import Control.Monad.Except (Except, ExceptT, runExceptT, throwError)
+import Foliage.Program
+import Data.Tuple.Nested ((/\))
+import Control.Monad.Error.Class (class MonadThrow)
+import Control.Monad.Except (throwError)
 import Control.Monad.Maybe.Trans (MaybeT, runMaybeT)
-import Control.Monad.Reader (class MonadAsk, ReaderT, ask, runReaderT)
-import Control.Monad.State (class MonadState, StateT, evalStateT, execStateT, get, modify, modify_, runStateT)
+import Control.Monad.Reader (class MonadAsk, runReaderT)
+import Control.Monad.State (class MonadState, execStateT, get, modify_)
 import Control.MonadPlus (class MonadPlus)
-import Control.Plus (class Plus, empty)
+import Control.Plus (empty)
 import Data.Array as Array
-import Data.Either (Either(..), either)
-import Data.List (List(..))
+import Data.List (List(..), (:))
 import Data.List as List
 import Data.Map (Map)
 import Data.Map as Map
 import Data.Maybe (Maybe(..), isJust)
-import Data.Set as Set
 import Data.Traversable (traverse, traverse_)
-import Effect.Aff (Aff)
 import Partial.Unsafe (unsafeCrashWith)
 import Record as Record
 import Type.Proxy (Proxy(..))
+import Unsafe.Coerce (unsafeCoerce)
 
 -- type M
 --   = ReaderT Ctx (StateT Env M')
@@ -43,6 +38,7 @@ type Ctx
 type Env
   = { active_rules :: List Rule
     , concreteProps :: List ConcreteProp
+    , abstractProps :: List Prop
     }
 
 _active_rules = Proxy :: Proxy "active_rules"
@@ -57,7 +53,7 @@ enqueue_active_rule ::
   Rule -> m Unit
 enqueue_active_rule rule =
   modify_
-    (Record.modify (Proxy :: Proxy "active_rules") (Cons rule))
+    (Record.modify (Proxy :: Proxy "active_rules") (rule : _))
 
 dequeue_active_rule ::
   forall m.
@@ -66,7 +62,7 @@ dequeue_active_rule = do
   { active_rules } <- get
   case active_rules of
     Nil -> pure Nothing
-    Cons active_rule active_rules -> do
+    active_rule : active_rules -> do
       modify_ _ { active_rules = active_rules }
       pure (Just active_rule)
 
@@ -96,6 +92,7 @@ interpProgram (Program prog) = do
             # Map.values
             # List.filter (fromNoParamsNorHypothesesRule >>> isJust)
       , concreteProps: Nil
+      , abstractProps: Nil
       }
   env <-
     interpFocusModule
@@ -129,99 +126,111 @@ fixpointFocusModule =
     loop active_rule
     fixpointFocusModule
   where
-  -- Throw means break loop.
   loop ::
     forall m.
     MonadAsk Ctx m =>
     MonadState Env m =>
     MonadThrow Err m =>
     Rule -> m Unit
-  loop active_rule =
-    execMaybeT do
-      { rules } <- ask
-      -- check if `active_rule` has at least one hypothesis
-      case nextHypothesis active_rule of
-        -- `active_rule` has no hypotheses
-        Left { params, conclusion } -> learnProp conclusion
-        -- `active_rule` has at least one hypothesis
-        Right (hypothesis /\ active_rule) -> do
-          -- apply active rule to `rules` by trying to immediately derive 
-          -- `hypothesis`
-          rules
-            # traverse_ \rule -> do
-                -- require `rule` has no hypotheses
-                rule <- fromNoHypothesesRule rule # pure # fromJustT
-                -- require that `hypothesis` matches `rule.conclusion` via
-                -- substitution `sigma`, so we can use `rule` to instantiate
-                -- hypothesis, yielding a new `active_rule`
-                sigma <- matchProp hypothesis rule.conclusion
-                substRule sigma active_rule # lift >>= enqueue_active_rule >>> lift
+  loop (Rule { params, hypotheses, conclusion }) = case hypotheses of
+    Nil ->
+      if Map.isEmpty params then do
+        conclusion <- assertConcreteProp conclusion
+        learnConcreteProp conclusion
+      else do
+        learnAbstractProp conclusion
+    hypothesis : hypotheses ->
+      deriveProp hypothesis
+        >>= traverse_ \{ sigma } -> do
+            rule <- substRule sigma (Rule { params, hypotheses, conclusion })
+            enqueue_active_rule rule
 
-learnProp :: forall m. MonadAsk Ctx m => MonadState Env m => MonadThrow Err m => Prop -> m Unit
-learnProp prop = do
-  concreteProp <- assertConcreteProp prop
-  -- insert prop into `concreteProps`
-  modify_ (Record.modify _concreteProps (Cons concreteProp))
-  { rules } <- ask
-  -- enqueue any rules that result from applying a rule to `prop`
-  rules
-    # traverse_ \rule -> do
-        applyRule rule prop
-          >>= case _ of
-              Nothing -> pure unit
-              Just rule -> enqueue_active_rule rule
-
--- pure unit
-applyRule ::
+deriveProp ::
   forall m.
-  MonadThrow Err m =>
-  Rule -> Prop -> m (Maybe Rule)
-applyRule rule prop = case nextHypothesis rule of
-  Left _ -> pure Nothing
-  Right (hyp /\ rule) ->
-    matchProp hyp prop # runMaybeT
-      >>= case _ of
-          Nothing -> pure Nothing
-          Just sigma -> do
-            rule <- substRule sigma rule
-            pure (Just rule)
+  MonadState Env m =>
+  Prop -> m (List { prop :: Prop, sigma :: TermSubst })
+deriveProp prop = do
+  -- look in concreteProps and abstractProps for any props that can satisfy
+  -- `hypothesis`
+  { concreteProps, abstractProps } <- get
+  ((concreteProps <#> fromConcreteProp) <> abstractProps)
+    # List.foldr
+        ( \prop' results -> case compareProp prop prop' of
+            Just (LessThan sigma) -> { prop: prop', sigma } : results
+            _ -> results
+        )
+        Nil
+    # pure
 
--- | Variables in the left prop will be substituted for variables in the right
--- | prop. In other words, the left is _expected_ and the right is _actual_.
-matchProp ::
+learnConcreteProp ::
   forall m.
-  MonadThrow Err m =>
-  MonadPlus m =>
-  Prop -> Prop -> m TermSubst
-matchProp (Prop p1 t1) (Prop p2 t2)
-  | p1 == p2 = matchTerm t1 t2
+  MonadState Env m =>
+  ConcreteProp -> m Unit
+learnConcreteProp prop = do
+  { concreteProps } <- get
+  keep_prop /\ concreteProps <-
+    let
+      f prop' (keep_prop /\ concreteProps') = case compareProp (fromConcreteProp prop) (fromConcreteProp prop') of
+        -- prop >< prop' ==> keep prop'
+        Nothing -> (keep_prop /\ prop' : concreteProps')
+        -- prop < prop' ==> prop is subsumed; keep prop'
+        Just (LessThan _) -> (false /\ prop' : concreteProps')
+        -- prop = prop' ==> prop is subsumed; keep prop'
+        Just Equal -> (false /\ prop' : concreteProps')
+        -- prop > prop' ==> prop' is subsumed so drop prop'
+        Just (GreaterThan _) -> (keep_prop /\ concreteProps')
+    in
+      concreteProps # List.foldr f (true /\ Nil) # pure
+  modify_ _ { concreteProps = (if keep_prop then (prop : _) else identity) concreteProps }
 
-matchProp (Prop p1 t1) (Prop p2 t2) = empty
-
--- | Variables in the left term will be substituted for variables in the right
--- | term. In other words, the left is _expected_ and the right is _actual_.
-matchTerm ::
+learnAbstractProp ::
   forall m.
-  MonadThrow Err m =>
-  MonadPlus m =>
-  Term -> Term -> m TermSubst
-matchTerm (VarTerm lty x1) t2 = Map.singleton x1 t2 # pure
+  MonadState Env m =>
+  Prop -> m Unit
+learnAbstractProp prop = do
+  { abstractProps } <- get
+  keep_prop /\ abstractProps <-
+    let
+      f prop' (keep_prop /\ abstractProps') = case compareProp prop prop' of
+        -- prop >< prop' ==> keep prop'
+        Nothing -> (keep_prop /\ prop' : abstractProps')
+        -- prop < prop' ==> prop is subsumed; keep prop'
+        Just (LessThan _) -> (false /\ prop' : abstractProps')
+        -- prop = prop' ==> prop is subsumed; keep prop'
+        Just Equal -> (false /\ prop' : abstractProps')
+        -- prop > prop' ==> prop' is subsumed so drop prop'
+        Just (GreaterThan _) -> (keep_prop /\ abstractProps')
+    in
+      abstractProps # List.foldr f (true /\ Nil) # pure
+  modify_ _ { abstractProps = (if keep_prop then (prop : _) else identity) abstractProps }
 
-matchTerm (UnitTerm lty1) (UnitTerm lty2) = Map.empty # pure
-
-matchTerm (LeftTerm lty1 t1) (LeftTerm lty2 t2) = matchTerm t1 t2
-
-matchTerm (RightTerm lty1 t1) (RightTerm lty2 t2) = matchTerm t1 t2
-
-matchTerm (PairTerm lty1 s1 t1) (PairTerm lty2 s2 t2) = do
-  sigma1 <- matchTerm s1 s2
-  t2 <- substTerm sigma1 t2
-  matchTerm t1 t2
-
-matchTerm (SetTerm lty1 t1) (SetTerm lty2 t2) = todo "matchTerm SetTerm"
-
-matchTerm _ _ = empty
-
+-- -- | Variables in the left prop will be substituted for variables in the right
+-- -- | prop. In other words, the left is _expected_ and the right is _actual_.
+-- matchProp ::
+--   forall m.
+--   MonadThrow Err m =>
+--   MonadPlus m =>
+--   Prop -> Prop -> m TermSubst
+-- matchProp (Prop p1 t1) (Prop p2 t2)
+--   | p1 == p2 = matchTerm t1 t2
+-- matchProp (Prop p1 t1) (Prop p2 t2) = empty
+-- -- | Variables in the left term will be substituted for variables in the right
+-- -- | term. In other words, the left is _expected_ and the right is _actual_.
+-- matchTerm ::
+--   forall m.
+--   MonadThrow Err m =>
+--   MonadPlus m =>
+--   Term -> Term -> m TermSubst
+-- matchTerm (VarTerm lty x1) t2 = Map.singleton x1 t2 # pure
+-- matchTerm (UnitTerm lty1) (UnitTerm lty2) = Map.empty # pure
+-- matchTerm (LeftTerm lty1 t1) (LeftTerm lty2 t2) = matchTerm t1 t2
+-- matchTerm (RightTerm lty1 t1) (RightTerm lty2 t2) = matchTerm t1 t2
+-- matchTerm (PairTerm lty1 s1 t1) (PairTerm lty2 s2 t2) = do
+--   sigma1 <- matchTerm s1 s2
+--   t2 <- substTerm sigma1 t2
+--   matchTerm t1 t2
+-- matchTerm (SetTerm lty1 t1) (SetTerm lty2 t2) = todo "matchTerm SetTerm"
+-- matchTerm _ _ = empty
 assertConcreteProp :: forall m. MonadThrow Err m => Prop -> m ConcreteProp
 assertConcreteProp prop =
   prop
@@ -232,7 +241,7 @@ assertConcreteProp prop =
           }
 
 fromConcreteProp :: forall x. ConcreteProp -> PropF LatticeType x
-fromConcreteProp = map absurd
+fromConcreteProp = unsafeCoerce -- this is equivalent to `map absurd`
 
 --------------------------------------------------------------------------------
 -- miscellaneous
@@ -249,6 +258,7 @@ lookup label x m = case Map.lookup x m of
       }
   Just a -> pure a
 
+todo :: forall a12. String -> a12
 todo msg = unsafeCrashWith ("TODO: " <> msg)
 
 fromJustT ::
