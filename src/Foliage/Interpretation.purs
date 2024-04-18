@@ -1,8 +1,7 @@
 module Foliage.Interpretation where
 
-import Prelude
 import Foliage.Program
-import Data.Tuple.Nested ((/\))
+import Prelude
 import Control.Monad.Error.Class (class MonadThrow)
 import Control.Monad.Except (throwError)
 import Control.Monad.Maybe.Trans (MaybeT, runMaybeT)
@@ -17,9 +16,11 @@ import Data.Map (Map)
 import Data.Map as Map
 import Data.Maybe (Maybe(..), isJust)
 import Data.Traversable (traverse, traverse_)
+import Data.Tuple.Nested ((/\))
 import Partial.Unsafe (unsafeCrashWith)
 import Record as Record
 import Type.Proxy (Proxy(..))
+import Unsafe as Unsafe
 import Unsafe.Coerce (unsafeCoerce)
 
 -- type M
@@ -33,8 +34,10 @@ type Ctx
     }
 
 -- | Env:
--- | - active_rules :: priority queue of rules; priority is order of which
--- |   to try next
+-- | - active_rules :: priority queue of rules; priority is order of which to
+-- |   try next 
+-- | - TODO: concreteProps and abstractProps actually SHOULD NOT be separated --
+-- |   since abstract props can subsume concrete props of course!
 type Env
   = { active_rules :: List Rule
     , concreteProps :: List ConcreteProp
@@ -87,10 +90,7 @@ interpProgram (Program prog) = do
     env =
       -- initialize rules with only the axioms (i.e. given rules that are simply
       -- conclusions)
-      { active_rules:
-          main.rules
-            # Map.values
-            # List.filter (fromNoParamsNorHypothesesRule >>> isJust)
+      { active_rules: main.rules # Map.values
       , concreteProps: Nil
       , abstractProps: Nil
       }
@@ -123,27 +123,25 @@ fixpointFocusModule ::
 fixpointFocusModule =
   execMaybeT do
     active_rule <- dequeue_active_rule # fromJustT
-    loop active_rule
+    fixpointFocusModule_loop active_rule
     fixpointFocusModule
-  where
-  loop ::
-    forall m.
-    MonadAsk Ctx m =>
-    MonadState Env m =>
-    MonadThrow Err m =>
-    Rule -> m Unit
-  loop (Rule { params, hypotheses, conclusion }) = case hypotheses of
-    Nil ->
-      if Map.isEmpty params then do
-        conclusion <- assertConcreteProp conclusion
-        learnConcreteProp conclusion
-      else do
-        learnAbstractProp conclusion
-    hypothesis : hypotheses ->
-      deriveProp hypothesis
-        >>= traverse_ \{ sigma } -> do
-            rule <- substRule sigma (Rule { params, hypotheses, conclusion })
-            enqueue_active_rule rule
+
+fixpointFocusModule_loop ::
+  forall m.
+  MonadAsk Ctx m =>
+  MonadState Env m =>
+  MonadThrow Err m =>
+  Rule -> m Unit
+fixpointFocusModule_loop (Rule { hypotheses, conclusion }) = case hypotheses of
+  Nil -> case fromConcreteProp conclusion of
+    Nothing -> learnAbstractProp conclusion
+    Just conclusion -> learnConcreteProp conclusion
+  hypothesis : hypotheses ->
+    deriveProp hypothesis
+      >>= traverse_ \{ sigma } -> do
+          let
+            rule = Rule { hypotheses, conclusion } # substRule sigma
+          enqueue_active_rule rule
 
 deriveProp ::
   forall m.
@@ -153,7 +151,7 @@ deriveProp prop = do
   -- look in concreteProps and abstractProps for any props that can satisfy
   -- `hypothesis`
   { concreteProps, abstractProps } <- get
-  ((concreteProps <#> fromConcreteProp) <> abstractProps)
+  ((concreteProps <#> toAbstractProp) <> abstractProps)
     # List.foldr
         ( \prop' results -> case compareProp prop prop' of
             Just (LessThan sigma) -> { prop: prop', sigma } : results
@@ -170,13 +168,13 @@ learnConcreteProp prop = do
   { concreteProps } <- get
   keep_prop /\ concreteProps <-
     let
-      f prop' (keep_prop /\ concreteProps') = case compareProp (fromConcreteProp prop) (fromConcreteProp prop') of
+      f prop' (keep_prop /\ concreteProps') = case compareProp (toAbstractProp prop) (toAbstractProp prop') of
         -- prop >< prop' ==> keep prop'
         Nothing -> (keep_prop /\ prop' : concreteProps')
         -- prop < prop' ==> prop is subsumed; keep prop'
         Just (LessThan _) -> (false /\ prop' : concreteProps')
         -- prop = prop' ==> prop is subsumed; keep prop'
-        Just Equal -> (false /\ prop' : concreteProps')
+        Just (Equal _) -> (false /\ prop' : concreteProps')
         -- prop > prop' ==> prop' is subsumed so drop prop'
         Just (GreaterThan _) -> (keep_prop /\ concreteProps')
     in
@@ -197,7 +195,7 @@ learnAbstractProp prop = do
         -- prop < prop' ==> prop is subsumed; keep prop'
         Just (LessThan _) -> (false /\ prop' : abstractProps')
         -- prop = prop' ==> prop is subsumed; keep prop'
-        Just Equal -> (false /\ prop' : abstractProps')
+        Just (Equal _) -> (false /\ prop' : abstractProps')
         -- prop > prop' ==> prop' is subsumed so drop prop'
         Just (GreaterThan _) -> (keep_prop /\ abstractProps')
     in
@@ -240,8 +238,11 @@ assertConcreteProp prop =
           , description: "Expected to be a concrete proposition, but the variable " <> show (show x) <> " appeared in the prop " <> show (show prop) <> "."
           }
 
-fromConcreteProp :: forall x. ConcreteProp -> PropF LatticeType x
-fromConcreteProp = unsafeCoerce -- this is equivalent to `map absurd`
+fromConcreteProp :: Prop -> Maybe ConcreteProp
+fromConcreteProp prop = prop # traverse (const Nothing)
+
+toAbstractProp :: forall x. ConcreteProp -> PropF LatticeType x
+toAbstractProp = unsafeCoerce -- this is equivalent to `map absurd`
 
 --------------------------------------------------------------------------------
 -- miscellaneous
@@ -257,9 +258,6 @@ lookup label x m = case Map.lookup x m of
       , description: label <> " not found: " <> show x
       }
   Just a -> pure a
-
-todo :: forall a12. String -> a12
-todo msg = unsafeCrashWith ("TODO: " <> msg)
 
 fromJustT ::
   forall m a.

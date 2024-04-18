@@ -45,14 +45,12 @@ test_example =
                 Map.fromFoldable
                   [ Name "R1"
                       /\ Rule
-                          { params: Map.empty
-                          , hypotheses: Nil
+                          { hypotheses: Nil
                           , conclusion: Prop (Name "R") (UnitTerm UnitLatticeType)
                           }
                   , Name "S1"
                       /\ Rule
-                          { params: Map.empty
-                          , hypotheses: Prop (Name "R") (UnitTerm UnitLatticeType) : Nil
+                          { hypotheses: Prop (Name "R") (UnitTerm UnitLatticeType) : Nil
                           , conclusion: Prop (Name "S") (UnitTerm UnitLatticeType)
                           }
                   ]

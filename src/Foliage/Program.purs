@@ -1,7 +1,8 @@
 module Foliage.Program where
 
 import Prelude
-import Control.Monad.Error.Class (class MonadThrow, throwError)
+import Control.Alternative (guard)
+import Control.Monad.Error.Class (class MonadThrow)
 import Data.Either (Either(..))
 import Data.Eq.Generic (genericEq)
 import Data.Foldable (class Foldable, null)
@@ -10,7 +11,6 @@ import Data.List (List(..))
 import Data.Map (Map)
 import Data.Map as Map
 import Data.Maybe (Maybe(..), fromMaybe)
-import Data.Set as Set
 import Data.Show.Generic (genericShow)
 import Data.Traversable (class Traversable, traverse)
 import Data.Tuple.Nested (type (/\), (/\))
@@ -92,8 +92,8 @@ instance _Show_LatticeTypeDef :: Show LatticeTypeDef where
 
 data LatticeType
   = UnitLatticeType
-  | SumLatticeType SumOrdering LatticeType LatticeType
-  | ProductLatticeType ProductOrdering LatticeType LatticeType
+  | SumLatticeType SumLatticeTypeOrdering LatticeType LatticeType
+  | ProductLatticeType ProductLatticeTypeOrdering LatticeType LatticeType
   | SetLatticeType SetOrdering LatticeType
   | OppositeLatticeType LatticeType
   | PowerLatticeType LatticeType
@@ -106,26 +106,29 @@ instance _Eq_LatticeType :: Eq LatticeType where
 instance _Show_LatticeType :: Show LatticeType where
   show x = genericShow x
 
-data SumOrdering
-  = SumOrdering
+data SumLatticeTypeOrdering
+  = LeftGreaterThanRight_SumLatticeTypeOrdering
+  | LeftLessThanRight_SumLatticeTypeOrdering
+  | LeftIncomparableRight_SumLatticeTypeOrdering
+  | LeftEqualRight_SumLatticeTypeOrdering
 
-derive instance _Generic_SumOrdering :: Generic SumOrdering _
+derive instance _Generic_SumLatticeTypeOrdering :: Generic SumLatticeTypeOrdering _
 
-instance _Eq_SumOrdering :: Eq SumOrdering where
+instance _Eq_SumLatticeTypeOrdering :: Eq SumLatticeTypeOrdering where
   eq x = genericEq x
 
-instance _Show_SumOrdering :: Show SumOrdering where
+instance _Show_SumLatticeTypeOrdering :: Show SumLatticeTypeOrdering where
   show x = genericShow x
 
-data ProductOrdering
-  = ProductOrdering
+data ProductLatticeTypeOrdering
+  = ProductLatticeTypeOrdering
 
-derive instance _Generic_ProductOrdering :: Generic ProductOrdering _
+derive instance _Generic_ProductLatticeTypeOrdering :: Generic ProductLatticeTypeOrdering _
 
-instance _Eq_ProductOrdering :: Eq ProductOrdering where
+instance _Eq_ProductLatticeTypeOrdering :: Eq ProductLatticeTypeOrdering where
   eq x = genericEq x
 
-instance _Show_ProductOrdering :: Show ProductOrdering where
+instance _Show_ProductLatticeTypeOrdering :: Show ProductLatticeTypeOrdering where
   show x = genericShow x
 
 data SetOrdering
@@ -168,8 +171,7 @@ type Rule
 
 data RuleF ty
   = Rule
-    { params :: Map Name LatticeType
-    , hypotheses :: List (PropF ty Name)
+    { hypotheses :: List (PropF ty Name)
     , conclusion :: PropF ty Name
     }
 
@@ -181,38 +183,20 @@ instance _Eq_Rule :: Eq ty => Eq (RuleF ty) where
 instance _Show_Rule :: Show ty => Show (RuleF ty) where
   show x = genericShow x
 
-type NoParamsNorHypothesisRule
-  = { conclusion :: Prop }
-
-fromNoParamsNorHypothesesRule :: Rule -> Maybe NoParamsNorHypothesisRule
-fromNoParamsNorHypothesesRule (Rule rule)
-  | null rule.params
-  , null rule.hypotheses = Just { conclusion: rule.conclusion }
-
-fromNoParamsNorHypothesesRule _ = Nothing
-
-fromNoHypothesesRule :: Rule -> Maybe NoHypothesisRule
-fromNoHypothesesRule (Rule rule)
-  | null rule.hypotheses =
-    Just
-      { params: rule.params
-      , conclusion: rule.conclusion
-      }
-
-fromNoHypothesesRule _ = Nothing
-
-type NoHypothesisRule
-  = { params :: Map Name LatticeType
-    , conclusion :: Prop
-    }
+fromNoHypothesesRule :: Rule -> Maybe Prop
+fromNoHypothesesRule (Rule rule) =
+  if null rule.hypotheses then
+    Just rule.conclusion
+  else
+    Nothing
 
 nextHypothesis ::
   Rule ->
   Either
-    NoHypothesisRule
+    Prop
     (Prop /\ Rule)
 nextHypothesis (Rule rule) = case rule.hypotheses of
-  Nil -> Left { params: rule.params, conclusion: rule.conclusion }
+  Nil -> Left rule.conclusion
   Cons p ps -> Right (p /\ Rule rule { hypotheses = ps })
 
 type Prop
@@ -266,47 +250,84 @@ derive instance _Traversable_TermF :: Traversable (TermF ty)
 type TermSubst
   = Map Name Term
 
-substRule ::
-  forall m.
-  MonadThrow Err m =>
-  TermSubst -> Rule -> m Rule
-substRule sigma (Rule rule) = do
-  unless (Map.keys sigma `Set.subset` Map.keys rule.params) do
-    throwError
-      { source: "substRule"
-      , description: "all variables in `sigma` must appear in `rule.params`"
-      }
-  params <- pure (rule.params `Map.difference` sigma)
-  hypotheses <- rule.hypotheses # traverse (substProp sigma)
-  conclusion <- rule.conclusion # substProp sigma
-  pure (Rule { params, hypotheses, conclusion })
+substRule :: TermSubst -> Rule -> Rule
+substRule sigma (Rule rule) =
+  Rule
+    { hypotheses: rule.hypotheses <#> substProp sigma
+    , conclusion: rule.conclusion # substProp sigma
+    }
 
-substProp :: forall m. MonadThrow Err m => TermSubst -> Prop -> m Prop
-substProp sigma (Prop p t) = Prop p <$> substTerm sigma t
+substProp :: TermSubst -> Prop -> Prop
+substProp sigma (Prop p t) = Prop p (substTerm sigma t)
 
-substTerm :: forall m. MonadThrow Err m => TermSubst -> Term -> m Term
-substTerm sigma (VarTerm lty x) = Map.lookup x sigma # fromMaybe (VarTerm lty x) # pure
+substTerm :: TermSubst -> Term -> Term
+substTerm sigma (VarTerm lty x) = Map.lookup x sigma # fromMaybe (VarTerm lty x)
 
-substTerm _sigma (UnitTerm lty) = UnitTerm lty # pure
+substTerm _sigma (UnitTerm lty) = UnitTerm lty
 
-substTerm sigma (LeftTerm lty t) = LeftTerm lty <$> substTerm sigma t
+substTerm sigma (LeftTerm lty t) = LeftTerm lty (substTerm sigma t)
 
-substTerm sigma (RightTerm lty t) = RightTerm lty <$> substTerm sigma t
+substTerm sigma (RightTerm lty t) = RightTerm lty (substTerm sigma t)
 
-substTerm sigma (PairTerm lty s t) = PairTerm lty <$> substTerm sigma s <*> substTerm sigma t
+substTerm sigma (PairTerm lty s t) = PairTerm lty (substTerm sigma s) (substTerm sigma t)
 
-substTerm sigma (SetTerm lty ts) = SetTerm lty <$> traverse (substTerm sigma) ts
+substTerm sigma (SetTerm lty ts) = SetTerm lty (ts <#> substTerm sigma)
 
 compareProp :: Prop -> Prop -> Maybe LatticeOrdering
-compareProp t1 t2 = unsafeCrashWith "TODO: compareProp"
+compareProp (Prop p1 t1) (Prop p2 t2) =
+  if p1 == p2 then
+    compareTerm t1 t2
+  else
+    Nothing
 
+freshName :: Unit -> Name
+freshName _ = unsafeCrashWith "freshName"
+
+-- | Requires the terms to have the same type type.
 compareTerm :: Term -> Term -> Maybe LatticeOrdering
-compareTerm t1 t2 = unsafeCrashWith "TODO: compareTerm"
+compareTerm (VarTerm ty1 x1) (VarTerm ty2 x2) =
+  Equal
+    ( Map.fromFoldable
+        [ x1 /\ VarTerm ty1 (freshName unit)
+        , x2 /\ VarTerm ty2 (freshName unit)
+        ]
+    )
+    # Just
 
+compareTerm (VarTerm ty1 x1) t2 =
+  GreaterThan
+    (Map.singleton x1 t2)
+    # Just
+
+compareTerm t1 (VarTerm ty2 x2) =
+  LessThan
+    (Map.singleton x2 t1)
+    # Just
+
+compareTerm (UnitTerm _) (UnitTerm _) =
+  Equal Map.empty
+    # Just
+
+compareTerm (LeftTerm _ t1) (LeftTerm _ t2) = compareTerm t1 t2
+
+compareTerm (LeftTerm _ t1) (RightTerm _ t2) = compareTerm t1 t2
+
+compareTerm (RightTerm _ t1) (LeftTerm _ t2) = compareTerm t1 t2
+
+compareTerm (RightTerm _ t1) (RightTerm _ t2) = compareTerm t1 t2
+
+compareTerm t1 t2 = unsafeCrashWith "comapreTerm"
+
+-- | LatticeOrdering:
+-- | - `a = b` if there exists a substitution of `a` and a substitution of `b`
+-- |   such that `a === b`
+-- | - `a < b` if there exists a substitution of `b` such that `a` is subsumed
+-- |   by `b`
+-- | - `a > b` if `b < a`.
 data LatticeOrdering
   = LessThan TermSubst
   | GreaterThan TermSubst
-  | Equal
+  | Equal TermSubst
 
 newtype Name
   = Name String
