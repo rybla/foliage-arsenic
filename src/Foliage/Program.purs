@@ -287,8 +287,3 @@ derive newtype instance _Show_Name :: Show Name
 
 mainModuleName :: Name
 mainModuleName = Name "Main"
-
-type Err
-  = { source :: String
-    , description :: String
-    }

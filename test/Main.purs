@@ -1,15 +1,18 @@
 module Test.Main where
 
+import Foliage.Program
 import Prelude
-import Data.Tuple.Nested ((/\))
-import Foliage.Program (LatticeType(..), ModuleF(..), Name(..), ProgramF(..), PropF(..), Relation(..), RuleF(..), TermF(..), mainModuleName)
 import Control.Monad.Except (runExceptT)
+import Control.Monad.Writer (runWriterT)
 import Data.Either (Either(..))
+import Data.Foldable (traverse_)
 import Data.List (List(..), (:))
 import Data.List as List
 import Data.Map as Map
+import Data.Tuple.Nested ((/\))
 import Effect (Effect)
 import Effect.Aff (launchAff_)
+import Effect.Class.Console as Console
 import Foliage.Interpretation (interpProgram)
 import Test.Spec (Spec, describe, it)
 import Test.Spec.Assertions (shouldEqual)
@@ -46,20 +49,29 @@ test_example =
                   [ Name "R1"
                       /\ Rule
                           { hypotheses: Nil
-                          , conclusion: Prop (Name "R") (UnitTerm UnitLatticeType)
+                          , conclusion: Prop (Name "R") UnitTerm
                           }
                   , Name "S1"
                       /\ Rule
-                          { hypotheses: Prop (Name "R") (UnitTerm UnitLatticeType) : Nil
-                          , conclusion: Prop (Name "S") (UnitTerm UnitLatticeType)
+                          { hypotheses: Prop (Name "R") UnitTerm : Nil
+                          , conclusion: Prop (Name "S") UnitTerm
                           }
                   ]
             }
-      concreteProps <- interpProgram prog # runExceptT
+      let
+        handleLogs = traverse_ Console.logShow
+      props <-
+        interpProgram prog
+          # ( runWriterT
+                >=> \(a /\ logs) -> do
+                    logs # handleLogs
+                    pure a
+            )
+          # runExceptT
       shouldEqual
-        concreteProps
+        props
         ( (Right <<< List.fromFoldable)
-            [ Prop (Name "S") (UnitTerm UnitLatticeType)
-            , Prop (Name "R") (UnitTerm UnitLatticeType)
+            [ Prop (Name "S") UnitTerm
+            , Prop (Name "R") UnitTerm
             ]
         )
