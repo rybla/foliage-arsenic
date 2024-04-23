@@ -2,16 +2,21 @@
   "name": "foliage-arsenic",
   "version": "1.0.0",
   "description": "",
-  "main": "index.js",
   "scripts": {
     "postinstall": "spago install",
     "build": "spago build",
-    "test": "spago test"
+    "test": "spago test",
+    "bundle-watch": "pnpm spago bundle-app --main Foliage.App.Main --to docs/foliage.js --clear-screen --source-maps --watch",
+    "dev": "http-server docs -p 8000 & pnpm run bundle-watch",
+    "serve": "http-server docs -p 8000",
+    "start": "pnpm run build && pnpm run build --watch & esbuild app.js --bundle --outfile=docs/foliage.js --servedir=docs"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
   "devDependencies": {
+    "esbuild": "^0.20.2",
+    "http-server": "^14.1.1",
     "purescript": "^0.15.15",
     "spago": "^0.21.0"
   }

@@ -9,6 +9,7 @@ import Data.List (List(..))
 import Data.Map (Map)
 import Data.Map as Map
 import Data.Maybe (Maybe(..), fromMaybe)
+import Data.Newtype (class Newtype)
 import Data.Show.Generic (genericShow)
 import Data.Traversable (class Traversable)
 import Data.Tuple.Nested (type (/\), (/\))
@@ -278,6 +279,8 @@ data LatticeOrdering
 
 newtype Name
   = Name String
+
+derive instance _Newtype_Name :: Newtype Name _
 
 derive newtype instance _Eq_Name :: Eq Name
 

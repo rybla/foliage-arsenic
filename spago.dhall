@@ -7,6 +7,7 @@
   , "effect"
   , "either"
   , "foldable-traversable"
+  , "halogen"
   , "lists"
   , "maybe"
   , "newtype"
