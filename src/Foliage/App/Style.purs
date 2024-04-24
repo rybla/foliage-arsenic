@@ -4,7 +4,7 @@ import Prelude
 import Data.Array as Array
 import Halogen.HTML.Properties as HP
 
-style = HP.style <<< Array.intercalate "; "
+style = HP.style <<< Array.foldMap (_ <> "; ")
 
 flex_row = [ "display: flex", "flex-direction: row", "gap: 0.5em" ]
 
@@ -38,6 +38,10 @@ font_size_small = [ "font-size: 0.8em" ]
 
 boundaries = rounded <> [ "box-shadow: 0.1em 0 0 0 rgba(0, 0, 0, 0.5) inset" ]
 
-button = rounded <> [ "border: none", "background-color: black", "color: white", "padding: 0.2em 0.8em" ]
+button = rounded <> [ "border: none", "background-color: black", "color: white", "padding: 0.2em 0.8em", "user-select: none" ]
+
+button_secondary = rounded <> [ "border: none", "background-color: gray", "color: white", "padding: 0.2em 0.8em", "user-select: none" ]
 
 color_error = [ "color: red" ]
+
+hidden = [ "display: none", "visibility: hidden" ]

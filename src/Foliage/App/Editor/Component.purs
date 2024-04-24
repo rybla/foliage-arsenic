@@ -1,28 +1,36 @@
 module Foliage.App.Editor.Component where
 
-import Foliage.Program
+import Data.Tuple.Nested
 import Prelude
-import BrowserUtility (getJsonFromChangeInputFile, loadJson, saveJson)
+
+import BrowserUtility (getJsonFromChangeInputFile, saveJson)
 import Control.Monad.State (get, modify_)
 import Data.Argonaut (decodeJson, encodeJson, printJsonDecodeError)
 import Data.Array as Array
 import Data.Either (Either(..))
-import Data.FunctorWithIndex (mapWithIndex)
+import Data.Lazy as Lazy
 import Data.Map as Map
 import Data.Maybe (Maybe(..), fromMaybe)
 import Data.Newtype (unwrap)
-import Debug as Debug
 import Effect.Aff (Aff)
 import Effect.Class.Console as Console
+import Foliage.App.ComponentLibrary.DropdownMenu as DropdownMenu
+import Foliage.App.Rendering (renderProgram)
 import Foliage.App.Style as Style
+import Foliage.Example as Example
+import Foliage.Program (Module(..), Name(..), Program(..), mainModuleName)
 import Halogen (Component, defaultEval, liftAff, liftEffect, mkComponent, mkEval)
 import Halogen as H
 import Halogen.HTML as HH
 import Halogen.HTML.Events as HE
 import Halogen.HTML.Properties as HP
+import Type.Proxy (Proxy(..))
 import Unsafe as Unsafe
 import Web.Event.Internal.Types (Event)
 import Web.HTML.HTMLElement as HTMLElement
+
+data Query a
+  = GetProgram (Program -> a)
 
 type Input
   = { program :: Maybe Program
@@ -40,8 +48,9 @@ data Action
   = Save
   | Load
   | ChangeProgramInput Event
+  | SetProgram Program
 
-component :: forall query. Component query Input Output Aff
+component :: Component Query Input Output Aff
 component = mkComponent { initialState, eval, render }
   where
   program_input_ref = H.RefLabel "program_input"
@@ -73,7 +82,13 @@ component = mkComponent { initialState, eval, render }
     modify_ _ { program = program }
     H.raise (UpdatedProgram program)
 
-  eval = mkEval defaultEval { handleAction = handleAction }
+  eval = mkEval defaultEval { handleAction = handleAction, handleQuery = handleQuery }
+
+  handleQuery :: forall a. Query a -> _ (Maybe a)
+  handleQuery = case _ of
+    GetProgram k -> do
+      { program } <- get
+      pure (Just (k program))
 
   handleAction = case _ of
     Save -> do
@@ -95,35 +110,63 @@ component = mkComponent { initialState, eval, render }
               Right program -> do
                 modify_ _ { load_error = Nothing }
                 set_program program
+    SetProgram program -> do
+      Console.log "[Editor.SetProgram]"
+      set_program program
 
   render state =
     HH.div [ Style.style $ Style.rounded <> Style.padding_big <> Style.shadowed <> Style.font_code <> Style.flex_column <> [ "gap: 1.0em" ] ]
       ( Array.concat
           [ [ HH.div [ Style.style $ Style.flex_row ]
-                ( Array.concat
-                    [ [ HH.div []
-                          [ HH.button
-                              [ HE.onClick (const Save)
-                              , Style.style Style.button
-                              ]
-                              [ HH.text "Save" ]
+                let
+                  button onClick label =
+                    HH.div []
+                      [ HH.button
+                          [ HE.onClick onClick
+                          , Style.style Style.button
                           ]
-                      , HH.div []
-                          [ HH.button
-                              [ HE.onClick (const Load)
-                              , Style.style Style.button
-                              ]
-                              [ HH.text "Load" ]
-                          , HH.input
-                              [ HP.ref program_input_ref
-                              , HP.type_ HP.InputFile
-                              , HE.onChange ChangeProgramInput
-                              , Style.style [ "display: none" ]
-                              ]
-                          ]
+                          [ HH.text label ]
                       ]
-                    ]
-                )
+                in
+                  [ button (const Save) "Save"
+                  , button (const Load) "Load"
+                  , HH.input
+                      [ HP.ref program_input_ref
+                      , HP.type_ HP.InputFile
+                      , HE.onChange ChangeProgramInput
+                      , Style.style [ "display: none" ]
+                      ]
+                  , HH.slot (Proxy :: Proxy "dropdown") "examples" DropdownMenu.component
+                      { title:
+                          HH.div [ Style.style $ Style.button ]
+                            [ HH.text "Examples" ]
+                      , items:
+                          let
+                            label str =
+                              HH.div [ Style.style $ Style.button_secondary <> [ "width: 10em" ] ]
+                                [ HH.text str ]
+                          in
+                            [ label "Blank" /\ Example.blank
+                            , label "Example 1" /\ Example.example1
+                            , label "Example 1" /\ Example.example1
+                            , label "Example 1" /\ Example.example1
+                            , label "Example 1" /\ Example.example1
+                            , label "Example 1" /\ Example.example1
+                            , label "Example 1" /\ Example.example1
+                            , label "Example 1" /\ Example.example1
+                            , label "Example 1" /\ Example.example1
+                            , label "Example 1" /\ Example.example1
+                            , label "Example 1" /\ Example.example1
+                            , label "Example 1" /\ Example.example1
+                            , label "Example 1" /\ Example.example1
+                            , label "Example 1" /\ Example.example1
+                            , label "Example 1" /\ Example.example1
+                            , label "Example 1" /\ Example.example1
+                            , label "Example 1" /\ Example.example1
+                            ]
+                      }
+                      (SetProgram <<< Lazy.force)
+                  ]
             ]
           , case state.load_error of
               Nothing -> []
@@ -131,67 +174,3 @@ component = mkComponent { initialState, eval, render }
           , [ renderProgram state.program ]
           ]
       )
-
-renderProgram (Program program) =
-  HH.div [ Style.style $ Style.flex_column <> [ "gap: 1.0em" ] ] $ Array.concat
-    $ [ [ renderLine [ renderStructural "program", renderName program.name ] ]
-      , program.modules
-          # map renderModule
-          # Map.values
-          # Array.fromFoldable
-      ]
-
-renderModule (Module mod) =
-  renderDefinition
-    (renderStructural "module")
-    (renderName mod.name)
-    ( Array.concat
-        [ mod.latticeTypeDefs
-            # mapWithIndex
-                ( \name latticeTypeDef ->
-                    renderDefinition (renderStructural "data type") (renderName name) case latticeTypeDef of
-                      LatticeTypeDef lty -> [ renderLatticeType lty ]
-                )
-            # Map.values
-            # Array.fromFoldable
-        , mod.dataTypeDefs
-            # mapWithIndex
-                ( \name dataTypeDef ->
-                    renderDefinition (renderStructural "data type") (renderName name) case dataTypeDef of
-                      DataTypeDef dty -> [ renderDataType dty ]
-                      ExternalDataTypeDef name -> [ HH.div [] [ renderLine [ renderStructural "external" ] ] ]
-                )
-            # Map.values
-            # Array.fromFoldable
-        ]
-    )
-  where
-  renderLatticeType = case _ of
-    UnitLatticeType -> renderPrimitive "Unit"
-    SumLatticeType o l r -> renderLine [ renderStructural "(", renderLatticeType l, renderStructural "+", renderLatticeType r, renderStructural ")" ]
-    ProductLatticeType o f s -> renderLine [ renderStructural "(", renderLatticeType f, renderStructural "*", renderLatticeType s, renderStructural ")" ]
-    SetLatticeType o d -> renderPrimitive "Set"
-    OppositeLatticeType l -> renderPrimitive "Op"
-    PowerLatticeType l -> renderPrimitive "Pow"
-
-  renderDataType = case _ of
-    UnitDataType -> renderPrimitive "Unit"
-    SumDataType l r -> renderLine [ renderStructural "(", renderDataType l, renderStructural "+", renderDataType r, renderStructural ")" ]
-    ProductDataType f s -> renderPrimitive "Prod"
-    SetDataType d -> renderPrimitive "Set"
-
-renderDefinition sort name body =
-  HH.div [ Style.style $ Style.flex_column <> Style.padding_small <> Style.boundaries ]
-    [ renderLine $ [ sort, name, renderStructural "=" ]
-    , renderSection body
-    ]
-
-renderLine = HH.div [ Style.style $ Style.flex_row <> [ "display: inline-flex", "white-space: flex-wrap" ] ]
-
-renderStructural label = HH.div [ Style.style $ Style.bold <> [ "color: black" ] ] [ HH.text label ]
-
-renderPrimitive label = HH.div [ Style.style $ Style.italic <> [ "color: purple" ] ] [ HH.text label ]
-
-renderName name = HH.div [ Style.style $ Style.italic <> [ "color: green" ] ] [ HH.text (unwrap name) ]
-
-renderSection = HH.div [ Style.style $ Style.flex_column <> Style.padding_horizontal_big ]

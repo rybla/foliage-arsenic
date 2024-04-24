@@ -34,33 +34,33 @@ test_example =
         prog =
           Program
             { name: Name "Example 1"
-            , modules: Map.singleton mainModuleName mainModule
-            }
-
-        mainModule =
-          Module
-            { name: mainModuleName
-            , dataTypeDefs: Map.empty
-            , functionDefs: Map.empty
-            , latticeTypeDefs: Map.empty
-            , relations:
-                Map.fromFoldable
-                  [ Name "R" /\ Relation { domain: UnitLatticeType }
-                  , Name "S" /\ Relation { domain: UnitLatticeType }
-                  ]
-            , rules:
-                Map.fromFoldable
-                  [ Name "R1"
-                      /\ Rule
-                          { hypotheses: Nil
-                          , conclusion: Prop (Name "R") UnitTerm
-                          }
-                  , Name "S1"
-                      /\ Rule
-                          { hypotheses: Prop (Name "R") UnitTerm : Nil
-                          , conclusion: Prop (Name "S") UnitTerm
-                          }
-                  ]
+            , modules:
+                Map.singleton mainModuleName
+                  ( Module
+                      { name: mainModuleName
+                      , dataTypeDefs: Map.empty
+                      , functionDefs: Map.empty
+                      , latticeTypeDefs: Map.empty
+                      , relations:
+                          Map.fromFoldable
+                            [ Name "R" /\ Relation { domain: UnitLatticeType }
+                            , Name "S" /\ Relation { domain: UnitLatticeType }
+                            ]
+                      , rules:
+                          Map.fromFoldable
+                            [ Name "R1"
+                                /\ Rule
+                                    { hypotheses: Nil
+                                    , conclusion: Prop (Name "R") UnitTerm
+                                    }
+                            , Name "S1"
+                                /\ Rule
+                                    { hypotheses: Prop (Name "R") UnitTerm : Nil
+                                    , conclusion: Prop (Name "S") UnitTerm
+                                    }
+                            ]
+                      }
+                  )
             }
       let
         handleLogs = traverse_ Console.logShow
