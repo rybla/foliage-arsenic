@@ -37,3 +37,7 @@ italic = [ "font-style: italic" ]
 font_size_small = [ "font-size: 0.8em" ]
 
 boundaries = rounded <> [ "box-shadow: 0.1em 0 0 0 rgba(0, 0, 0, 0.5) inset" ]
+
+button = rounded <> [ "border: none", "background-color: black", "color: white", "padding: 0.2em 0.8em" ]
+
+color_error = [ "color: red" ]

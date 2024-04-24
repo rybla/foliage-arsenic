@@ -7,8 +7,8 @@
     "build": "spago build",
     "test": "spago test",
     "bundle-watch": "pnpm spago bundle-app --main Foliage.App.Main --to docs/foliage.js --clear-screen --source-maps --watch",
-    "dev": "http-server docs -p 8000 & pnpm run bundle-watch",
-    "serve": "http-server docs -p 8000",
+    "serve": "http-server docs -p 8777",
+    "dev": "pnpm run bundle-watch",
     "start": "pnpm run build && pnpm run build --watch & esbuild app.js --bundle --outfile=docs/foliage.js --servedir=docs"
   },
   "keywords": [],

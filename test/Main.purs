@@ -31,7 +31,11 @@ test_example =
   describe "example" do
     it "example 1" do
       let
-        prog = Program { modules: Map.singleton mainModuleName mainModule }
+        prog =
+          Program
+            { name: Name "Example 1"
+            , modules: Map.singleton mainModuleName mainModule
+            }
 
         mainModule =
           Module
