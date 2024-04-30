@@ -1,17 +1,17 @@
 module Foliage.App.Component where
 
-import Data.Tuple.Nested
-import Foliage.Program
 import Prelude
+import Foliage.Program
 import Control.Monad.Except (runExceptT)
 import Control.Monad.Trans.Class (lift)
 import Control.Monad.Writer (runWriterT)
 import Data.Array as Array
 import Data.Either (Either(..))
 import Data.Lazy as Lazy
-import Data.List (List(..))
-import Data.Map as Map
 import Data.Maybe (Maybe(..))
+import Data.Traversable (traverse_)
+import Data.Tuple.Nested ((/\))
+import Debug as Debug
 import Effect.Aff (Aff)
 import Effect.Class.Console as Console
 import Foliage.App.Console.Component (Query(..))
@@ -24,7 +24,6 @@ import Foliage.Interpretation as Interpretation
 import Halogen (Component, defaultEval, mkComponent, mkEval)
 import Halogen as H
 import Halogen.HTML as HH
-import Halogen.HTML.Properties as HP
 import Type.Proxy (Proxy(..))
 import Unsafe as Unsafe
 
@@ -55,6 +54,7 @@ component = mkComponent { initialState, eval, render }
           Interpretation.interpProgram program
             # ( runWriterT
                   >=> \(a /\ logs) -> do
+                      logs # traverse_ (Debug.traceM <<< show)
                       H.tell _console unit (SetLogs logs) # lift
                       pure a
               )

@@ -1,51 +1,47 @@
 module Foliage.Interpretation (interpProgram, Log(..), Err(..)) where
 
-import Foliage.Program
 import Prelude
-import Control.Monad.Error.Class (class MonadThrow, throwError)
+import Control.Monad.Error.Class (class MonadThrow)
 import Control.Monad.Except (throwError)
 import Control.Monad.Maybe.Trans (MaybeT, runMaybeT)
-import Control.Monad.Reader (class MonadAsk, class MonadReader, ask, runReaderT)
+import Control.Monad.Reader (class MonadReader, ask, runReaderT)
 import Control.Monad.State (class MonadState, execStateT, get, modify, modify_)
-import Control.Monad.Trans.Class (lift)
 import Control.Monad.Writer (class MonadTell, class MonadWriter, tell)
-import Control.MonadPlus (class MonadPlus)
 import Control.Plus (empty)
 import Data.Array as Array
 import Data.Bifunctor (lmap, rmap)
-import Data.Either (Either(..), either, fromRight)
-import Data.Generic.Rep (class Generic)
+import Data.Either (Either(..), either)
+import Data.Foldable (length)
 import Data.Int as Int
 import Data.List (List(..), (:))
 import Data.List as List
 import Data.Map (Map)
 import Data.Map as Map
-import Data.Maybe (Maybe(..), fromMaybe, maybe)
-import Data.Newtype (class Newtype, over)
-import Data.Newtype as Newtype
-import Data.Show.Generic (genericShow)
+import Data.Maybe (Maybe(..), maybe)
+import Data.Newtype (class Newtype)
 import Data.String.CodeUnits (fromCharArray)
-import Data.Traversable (class Traversable, traverse, traverse_)
+import Data.Traversable (traverse)
 import Data.Tuple (fst)
-import Data.Tuple.Nested ((/\))
+import Data.Tuple.Nested (type (/\), (/\))
 import Debug as Debug
 import Effect.Class (class MonadEffect)
-import Effect.Class.Console as Console
-import Partial.Unsafe (unsafeCrashWith)
-import Record as Record
+import Foliage.Program (FunctionDef(..), Hypothesis(..), LatticeOrdering, LatticeType(..), LatticeTypeDef(..), Module(..), Name, ProductLatticeTypeOrdering(..), Program(..), Prop, PropF(..), Relation(..), Rule(..), SideHypothesis(..), SumLatticeTypeOrdering(..), Term, TermF(..), freshName, lookupModule, mainModuleName, nextHypothesis, substRule, substTerm)
 import Type.Proxy (Proxy(..))
-import Unsafe (todo)
 import Unsafe as Unsafe
-import Unsafe.Coerce (unsafeCoerce)
 
+--------------------------------------------------------------------------------
+-- Constants
+--------------------------------------------------------------------------------
 initialGas :: Int
 initialGas = 100
 
+--------------------------------------------------------------------------------
+-- Types
+--------------------------------------------------------------------------------
 newtype Ctx
   = Ctx
   { modules :: Map Name Module
   , focusModule :: Module
-  , rules :: Array Rule
   -- external function name => external function
   , externalFunctions :: Map String (Map String Term -> Either String Term)
   -- external lattice type name => comparison function over that lattice type
@@ -54,23 +50,15 @@ newtype Ctx
 
 derive instance _Newtype_Ctx :: Newtype Ctx _
 
--- | Env:
--- | - active_rules :: priority queue of rules; priority is order of which to
--- |   try next 
--- | - TODO: concreteProps and abstractProps actually SHOULD NOT be separated --
--- |   since abstract props can subsume concrete props of course!
 newtype Env
   = Env
-  { active_rules :: List Rule
+  { gas :: Int
+  , rules :: List Rule
   , props :: List Prop
-  , gas :: Int
   }
 
 derive instance _Newtype_Env :: Newtype Env _
 
--- | Err
--- | - source :: where the error came froom
--- | - description :: detailed description of the error
 newtype Err
   = Err
   { source :: String
@@ -88,38 +76,66 @@ instance _Show_Err :: Show Err where
     where
     sep = '=' # Array.replicate 20 # fromCharArray
 
-data Log
-  = LearnPropLog Prop
-  | IgnorePropLog Prop
-  | EnqueueRuleLog Rule
-  | DequeueRuleLog Rule
-  | StringLog String
+newtype Log
+  = Log
+  { label :: String
+  , message :: String
+  }
 
-derive instance _Generic_Log :: Generic Log _
+derive instance _Newtype_Log :: Newtype Log _
 
 instance _Show_Log :: Show Log where
-  show = genericShow
-
--- TODO: actually this should _merge_ with active_rules, so that only
--- non-subsumed rules exist in the resulting active_rules
-enqueue_active_rule = enqueue_active_rules <<< List.singleton
-
-enqueue_active_rules rules = do
-  rules # traverse_ \rule -> tell [ EnqueueRuleLog rule ]
-  modify_ (Newtype.over Env (Record.modify (Proxy :: Proxy "active_rules") (rules <> _)))
-
-dequeue_active_rule = do
-  Env { active_rules } <- get
-  case active_rules of
-    Nil -> pure Nothing
-    active_rule : active_rules -> do
-      tell [ DequeueRuleLog active_rule ]
-      modify_ (Newtype.over Env _ { active_rules = active_rules })
-      pure (Just active_rule)
+  show (Log log) = "[" <> log.label <> "] " <> log.message
 
 --------------------------------------------------------------------------------
--- interpretation endpoint
+-- Endpoints
 --------------------------------------------------------------------------------
+interpProgram ::
+  forall m.
+  MonadWriter (Array Log) m =>
+  MonadThrow Err m =>
+  Program -> m (List Prop)
+interpProgram (Program prog) = do
+  focusModule@(Module main) <- lookup "module Main" mainModuleName prog.modules
+  Debug.traceM "[interpProgram]"
+  let
+    ctx =
+      Ctx
+        { modules: prog.modules
+        , focusModule
+        , externalFunctions
+        , externalCompares
+        }
+
+    env =
+      let
+        rules /\ props =
+          main.rules # Map.values
+            # partitionEither
+                ( \rule ->
+                    rule
+                      # nextHypothesis
+                      # case _ of
+                          Left conclusion -> Right conclusion
+                          Right _ -> Left rule
+                )
+      in
+        Env
+          { gas: initialGas
+          , rules
+          , props
+          }
+  Env env' <-
+    fixpointFocusModule
+      # flip runReaderT ctx
+      # flip execStateT env
+  pure env'.props
+
+externalFunctions :: Map String (Map String Term -> Either String Term)
+externalFunctions =
+  Map.fromFoldable
+    []
+
 externalCompares :: Map String (String -> String -> Either String Ordering)
 externalCompares =
   Map.fromFoldable
@@ -130,167 +146,46 @@ externalCompares =
             pure (compare x y)
     ]
 
-interpProgram :: forall m. MonadWriter (Array Log) m => MonadThrow Err m => MonadEffect m => Program -> m (List Prop)
-interpProgram (Program prog) = do
-  Module main <- lookup "module Main" mainModuleName prog.modules
-  let
-    ctx =
-      Ctx
-        { modules: prog.modules
-        , focusModule: Module main
-        , rules: main.rules # Map.values # Array.fromFoldable
-        , externalFunctions: Map.empty -- TODO: external functions
-        , externalCompares
-        }
-
-    env =
-      -- initialize rules with only the axioms (i.e. given rules that are simply
-      -- conclusions)
-      Env
-        { active_rules: main.rules # Map.values
-        , props: Nil
-        , gas: initialGas
-        }
-  Env env <-
-    interpFocusModule
-      # flip runReaderT ctx
-      # flip execStateT env
-  pure env.props
-
 --------------------------------------------------------------------------------
--- interpretation internals
+-- Implementation
 --------------------------------------------------------------------------------
--- | Interpret the focus module by computing the fixpoint of its rules.
-interpFocusModule :: forall m. MonadWriter (Array Log) m => MonadAsk Ctx m => MonadState Env m => MonadThrow Err m => MonadEffect m => m Unit
-interpFocusModule = do
-  fixpointFocusModule
-  pure unit
-
-fixpointFocusModule :: forall m. MonadWriter (Array Log) m => MonadAsk Ctx m => MonadState Env m => MonadThrow Err m => MonadEffect m => m Unit
-fixpointFocusModule =
-  execMaybeT do
-    modify (over Env \state -> state { gas = state.gas - 1 })
-      >>= \(Env state) ->
-          when (state.gas <= 0) do
-            throwError (Err { source: "fixpointFocusModule", description: "ran out of gas" })
-    active_rule <- dequeue_active_rule # fromJustT
-    fixpointFocusModule_loop active_rule
-    fixpointFocusModule
-
-processSideHypotheses sides rule = Array.foldr (\side m_rule -> m_rule >>= \rule -> processSideHypothesis rule side) (pure rule) sides
-  where
-  processSideHypothesis rule = case _ of
-    FunctionSideHypothesis side -> do
-      Ctx { focusModule, externalFunctions } <- ask
-      functionDef <-
-        focusModule
-          # lookupModule (Proxy :: Proxy "functionDefs") side.functionName
-          # maybe (throwError (Err { source: "processSideHypothesis", description: "could not function definition of the name " <> show side.functionName })) pure
-      result <- case functionDef of
-        ExternalFunctionDef functionDef -> case Map.lookup functionDef.name externalFunctions of
-          Nothing -> throwError (Err { source: "processSideHypothesis", description: "cound not find function of the name " <> show functionDef.name })
-          Just function -> do
-            args <- side.args # traverse evaluateTerm
-            result <-
-              function (Array.zip functionDef.inputs args # map (lmap fst) # Map.fromFoldable)
-                # either (\err -> throwError (Err { source: "processSideHypothesis", description: "error in function " <> show functionDef.name <> ": " <> err })) pure
-            pure result
-      substRule (Map.singleton side.resultVarName result) rule # pure
-
-evaluateTerm ::
-  forall m x y.
-  Traversable TermF =>
-  MonadThrow Err m =>
-  Show x =>
-  TermF x ->
-  m (TermF y)
-evaluateTerm = traverse \x -> throwError (Err { source: "evaluateTerm", description: "expected term to be a value, but found a variable " <> show x })
-
-fixpointFocusModule_loop ::
+fixpointFocusModule ::
   forall m.
+  MonadReader Ctx m =>
   MonadState Env m =>
-  MonadAsk Ctx m =>
   MonadThrow Err m =>
-  MonadTell (Array Log) m =>
-  MonadEffect m =>
-  Rule -> m Unit
-fixpointFocusModule_loop (Rule { hypotheses, conclusion }) = case hypotheses of
-  Nil -> learnProp conclusion
-  hypothesis : hypotheses -> case hypothesis of
-    Hypothesis hypothesis sides -> do
-      -- Debug.traceM $ "fixpointFocusModule_loop.hypothesis: " <> show hypothesis
-      deriveProp hypothesis
-        >>= traverse_ \{ sigma } -> do
-            -- Debug.traceM $ "fixpointFocusModule_loop.before: " <> show (Rule { hypotheses, conclusion })
-            sides <- sides <#> substSideHypothesis sigma # pure
-            rule <- Rule { hypotheses, conclusion } # substRule sigma # pure
-            rule <- processSideHypotheses sides rule
-            -- Debug.traceM $ "fixpointFocusModule_loop.after: " <> show rule
-            enqueue_active_rule rule
-
-applyRuleToProp ::
-  forall m.
-  MonadAsk Ctx m =>
-  MonadThrow Err m =>
-  MonadPlus m =>
-  MonadTell (Array Log) m =>
-  Rule -> PropF Name -> m Rule
-applyRuleToProp rule@(Rule { hypotheses, conclusion }) prop = do
-  -- Debug.traceM $ "trying to apply rule " <> show rule <> " to prop " <> show prop
-  case hypotheses of
-    Nil -> empty
-    hypothesis : hypotheses -> case hypothesis of
-      Hypothesis hypothesis sides ->
-        compareProp hypothesis prop
-          >>= case _ of
-              LT /\ sigma -> do
-                -- Debug.traceM $ "success; sigma = " <> show sigma
-                Rule { hypotheses, conclusion } # substRule sigma # pure
-              EQ /\ sigma -> do
-                -- Debug.traceM $ "success; sigma = " <> show sigma
-                Rule { hypotheses, conclusion } # substRule sigma # pure
-              _ -> empty
-
-deriveProp ::
-  forall m.
-  MonadState Env m =>
-  MonadAsk Ctx m =>
-  MonadThrow Err m =>
-  Prop ->
-  m
-    ( List
-        { prop :: Prop
-        , sigma :: Map Name (TermF Name)
-        }
-    )
-deriveProp prop = do
-  Debug.traceM $ "deriveProp " <> show prop
-  -- look in `props` for any props that can satisfy `hypothesis`
-  Env { props } <- get
-  props
-    # List.foldM
-        ( \results prop' -> do
-            Debug.traceM $ "trying " <> show prop'
-            (compareProp prop prop' # runMaybeT)
-              <#> case _ of
-                  Just (LT /\ sigma) -> do 
-                    Debug.traceM $ "success!" <> show prop'
-                    { prop: prop', sigma } : results
-                  _ -> results
-        )
-        Nil
+  MonadWriter (Array Log) m =>
+  m Unit
+fixpointFocusModule = do
+  get
+    >>= \(Env env) ->
+        Debug.traceM $ "[fixpointModule] "
+          <> show
+              { gas: env.gas
+              , rules_length: env.rules # List.length
+              , props_length: env.props # List.length
+              }
+  -- get >>= \(Env env) -> tell [ Log { label: "iteration", message: "gas = " <> show env.gas } ]
+  Env env <- modify \(Env env) -> (Env env { gas = env.gas - 1 })
+  when (env.gas <= 0) (throwError (Err { source: "fixpointFocusModule", description: "ran out of gas" }))
+  case env.props of
+    Nil -> pure unit
+    Cons prop props -> do
+      modify_ \(Env env') -> (Env env' { props = props })
+      learnProp prop
+      fixpointFocusModule
 
 learnProp ::
   forall m.
+  MonadReader Ctx m =>
   MonadState Env m =>
-  MonadAsk Ctx m =>
   MonadThrow Err m =>
-  MonadTell (Array Log) m =>
+  MonadWriter (Array Log) m =>
   Prop -> m Unit
 learnProp prop = do
-  Env { props } <- get
+  Env env <- get
   keep_prop /\ props <-
-    props
+    env.props
       # List.foldM
           ( \(keep_prop /\ props) prop' ->
               (compareProp prop prop' # runMaybeT)
@@ -306,30 +201,92 @@ learnProp prop = do
           )
           (true /\ Nil)
   if keep_prop then do
-    tell [ LearnPropLog prop ]
-    modify_ (Newtype.over Env _ { props = prop : props })
+    tell [ Log { label: "learn", message: show prop } ]
+    modify_ (\(Env env') -> (Env env' { props = prop : props }))
     -- activate any rules that can be applied to `prop`
-    Ctx { rules } <- ask
     new_active_rules <-
-      rules
+      env.rules
         # traverse
             ( \rule ->
                 (applyRuleToProp rule prop # runMaybeT)
                   <#> maybe Nil List.singleton
             )
         # map List.fold
-    enqueue_active_rules new_active_rules
+    modify_ (\(Env env') -> (Env env' { rules = new_active_rules <> env'.rules }))
   else do
-    tell [ IgnorePropLog prop ]
+    tell [ Log { label: "ignore", message: show prop } ]
+
+applyRuleToProp ::
+  forall m.
+  MonadReader Ctx m =>
+  MonadThrow Err m =>
+  MonadTell (Array Log) m =>
+  Rule -> PropF Name -> MaybeT m Rule
+applyRuleToProp (Rule rule) prop = do
+  case rule.hypotheses of
+    Nil -> empty
+    hypothesis : hypotheses -> case hypothesis of
+      Hypothesis hypothesis_prop sides -> do
+        -- first, check if prop satisfies hypothesis_prop
+        rule' <-
+          compareProp hypothesis_prop prop
+            >>= case _ of
+                LT /\ sigma -> do
+                  Rule { hypotheses, conclusion: rule.conclusion } # substRule sigma # pure
+                EQ /\ sigma -> do
+                  Rule { hypotheses, conclusion: rule.conclusion } # substRule sigma # pure
+                _ -> empty
+        -- second, check if the side hypotheses hold
+        processSideHypotheses rule' sides
+
+processSideHypotheses ::
+  forall m.
+  MonadReader Ctx m =>
+  MonadThrow Err m =>
+  Rule -> Array SideHypothesis -> m Rule
+processSideHypotheses rule sides =
+  Array.foldr
+    (\side m_rule -> m_rule >>= \rule' -> processSideHypothesis rule' side)
+    (pure rule)
+    sides
+
+processSideHypothesis ::
+  forall m.
+  MonadReader Ctx m =>
+  MonadThrow Err m =>
+  Rule -> SideHypothesis -> m Rule
+processSideHypothesis rule = case _ of
+  FunctionSideHypothesis side -> do
+    Ctx { focusModule, externalFunctions } <- ask
+    functionDef <-
+      focusModule
+        # lookupModule (Proxy :: Proxy "functionDefs") side.functionName
+        # maybe (throwError (Err { source: "processSideHypothesis", description: "could not function definition of the name " <> show side.functionName })) pure
+    result <- case functionDef of
+      ExternalFunctionDef externalFunctionDef -> case Map.lookup externalFunctionDef.name externalFunctions of
+        Nothing -> throwError (Err { source: "processSideHypothesis", description: "cound not find function of the name " <> show externalFunctionDef.name })
+        Just function -> do
+          args <- side.args # traverse evaluateTerm
+          result <-
+            function (Array.zip externalFunctionDef.inputs args # map (lmap fst) # Map.fromFoldable)
+              # either (\err -> throwError (Err { source: "processSideHypothesis", description: "error in function " <> show externalFunctionDef.name <> ": " <> err })) pure
+          pure result
+    substRule (Map.singleton side.resultVarName result) rule # pure
+
+--------------------------------------------------------------------------------
+-- Utilities
+--------------------------------------------------------------------------------
+evaluateTerm ::
+  forall m y.
+  MonadThrow Err m =>
+  TermF Name -> m (TermF y)
+evaluateTerm = traverse \x -> throwError (Err { source: "evaluateTerm", description: "expected term to be a value, but found a variable " <> show x })
 
 compareProp ::
   forall m.
-  MonadAsk Ctx m =>
+  MonadReader Ctx m =>
   MonadThrow Err m =>
-  MonadPlus m =>
-  Prop ->
-  Prop ->
-  m LatticeOrdering
+  Prop -> Prop -> MaybeT m LatticeOrdering
 compareProp (Prop p1 t1) (Prop p2 t2) = do
   unless (p1 == p2) empty
   Ctx { focusModule: Module { relations } } <- ask
@@ -338,13 +295,12 @@ compareProp (Prop p1 t1) (Prop p2 t2) = do
     Just (Relation { domain }) -> pure domain
   compareTerm domain t1 t2
 
--- | Requires the terms to have the same type type.
+-- | Assumes that terms to have the same type type.
 compareTerm ::
   forall m.
   MonadThrow Err m =>
-  MonadAsk Ctx m =>
-  MonadPlus m =>
-  LatticeType -> Term -> Term -> m LatticeOrdering
+  MonadReader Ctx m =>
+  LatticeType -> Term -> Term -> MaybeT m LatticeOrdering
 compareTerm _lty (VarTerm x1) (VarTerm x2) =
   EQ
     /\ ( Map.fromFoldable
@@ -421,10 +377,6 @@ compareTerm lty@(ProductLatticeType FirstThenSecond_ProductLatticeTypeOrdering l
 
 compareTerm lty@(SetLatticeType _ lty_elem) t1 t2 = Unsafe.todo "compareTerm SetLatticeType"
 
--- compareTerm lty (LiteralTerm s1 _) (LiteralTerm s2 _) = case compare s1 s2 of
---   LT -> LT /\Map.empty # pure
---   EQ -> EQ /\Map.empty # pure
---   GT -> GT /\ Map.empty # pure
 compareTerm (OppositeLatticeType lty) t1 t2 =
   compareTerm lty t1 t2
     >>= case _ of
@@ -439,35 +391,16 @@ compareTerm (DiscreteLatticeType lty) t1 t2 =
         EQ /\ sigma -> EQ /\ sigma # pure
         GT /\ _sigma -> empty
 
--- compareTerm lty t1 t2 = unsafeCrashWith $ "compareTerm " <> show lty <> " " <> show t1 <> " " <> show t2
 compareTerm (PowerLatticeType lty) t1 t2 = Unsafe.todo "compareTerm PowerLatticeType"
 
-assertConcreteProp :: forall m. MonadThrow Err m => Prop -> m ConcreteProp
-assertConcreteProp prop = prop # traverse \x -> throwError (Err { source: "assertConcreteProp", description: "Expected to be a concrete proposition, but the variable " <> show (show x) <> " appeared in the prop " <> show (show prop) <> "." })
-
-fromConcreteProp :: Prop -> Maybe ConcreteProp
-fromConcreteProp prop = prop # traverse (const Nothing)
-
-toAbstractProp :: forall x. ConcreteProp -> PropF x
-toAbstractProp = unsafeCoerce -- this is equivalent to `map absurd`
-
---------------------------------------------------------------------------------
--- miscellaneous
---------------------------------------------------------------------------------
+lookup :: forall m56 a57 a60. Ord a60 => MonadThrow Err m56 => Show a60 => String -> a60 -> Map a60 a57 -> m56 a57
 lookup label x m = case Map.lookup x m of
   Nothing -> throwError (Err { source: "lookup", description: label <> " not found: " <> show x })
   Just a -> pure a
 
-fromJustT ::
-  forall m a.
-  MonadPlus m =>
-  m (Maybe a) -> m a
-fromJustT =
-  ( _
-      >>= case _ of
-          Nothing -> empty
-          Just a -> pure a
-  )
-
-execMaybeT :: forall a m. Functor m => MaybeT m a -> m Unit
-execMaybeT = runMaybeT >>> void
+partitionEither :: forall a b c. (a -> Either b c) -> List a -> (List b /\ List c)
+partitionEither p xs = List.foldr select (Nil /\ Nil) xs
+  where
+  select a (bs /\ cs) = case p a of
+    Left b -> (b : bs) /\ cs
+    Right c -> bs /\ (c : cs)

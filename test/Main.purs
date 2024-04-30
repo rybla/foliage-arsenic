@@ -2,6 +2,7 @@ module Test.Main where
 
 import Foliage.Program
 import Prelude
+
 import Control.Monad.Except (runExceptT)
 import Control.Monad.Writer (runWriterT)
 import Data.Either (Either(..))
@@ -9,6 +10,7 @@ import Data.Foldable (traverse_)
 import Data.List (List(..), (:))
 import Data.List as List
 import Data.Map as Map
+import Data.Newtype (unwrap)
 import Data.Tuple.Nested ((/\))
 import Effect (Effect)
 import Effect.Aff (launchAff_)
@@ -63,7 +65,7 @@ test_example =
                   )
             }
       let
-        handleLogs = traverse_ Console.logShow
+        handleLogs = traverse_ (Console.logShow <<< unwrap)
       props <-
         interpProgram prog
           # ( runWriterT

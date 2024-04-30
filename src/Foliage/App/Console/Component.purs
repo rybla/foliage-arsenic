@@ -34,12 +34,10 @@ component = H.mkComponent { initialState, eval, render }
 
   handleAction _ = pure unit
 
-  renderLog = case _ of
-    LearnPropLog prop -> [ HH.div [ Style.style $ Style.italic <> Style.underline <> [ "padding-right: 0.5em" ] ] [ HH.text "learn" :: Html ] ] ⊕ prop ⊕ []
-    IgnorePropLog prop -> [ HH.div [ Style.style $ Style.italic <> Style.underline <> [ "padding-right: 0.5em" ] ] [ HH.text "ignore" :: Html ] ] ⊕ prop ⊕ []
-    EnqueueRuleLog rule -> [ HH.div [ Style.style $ Style.italic <> Style.underline <> [ "padding-right: 0.5em" ] ] [ HH.text "enqueue" :: Html ] ] ⊕ rule ⊕ []
-    DequeueRuleLog rule -> [ HH.div [ Style.style $ Style.italic <> Style.underline <> [ "padding-right: 0.5em" ] ] [ HH.text "dequeue" :: Html ] ] ⊕ rule ⊕ []
-    StringLog str -> [ HH.div [ Style.style $ Style.italic <> Style.underline <> [ "padding-right: 0.5em" ] ] [ HH.text "msg" :: Html ] ] ⊕ [ HH.div [] [ HH.text str :: Html ] ] ⊕ []
+  renderLog (Log log) =
+    [ HH.div [ Style.style $ Style.italic <> Style.underline <> [ "padding-right: 0.5em" ] ] [ HH.text log.label :: Html ] ]
+      ⊕ [ HH.div [] [ HH.text log.message :: Html ] ]
+      ⊕ []
 
   render state =
     HH.div [ Style.style $ Style.flex_column <> Style.font_code ]
