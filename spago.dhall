@@ -5,6 +5,7 @@
   , "argonaut"
   , "argonaut-generic"
   , "arrays"
+  , "bifunctors"
   , "console"
   , "control"
   , "debug"
@@ -12,6 +13,9 @@
   , "either"
   , "foldable-traversable"
   , "halogen"
+  , "homogeneous"
+  , "integers"
+  , "lazy"
   , "lists"
   , "maybe"
   , "newtype"
@@ -19,6 +23,7 @@
   , "partial"
   , "prelude"
   , "record"
+  , "refs"
   , "spec"
   , "strings"
   , "transformers"
@@ -27,6 +32,7 @@
   , "unsafe-coerce"
   , "web-events"
   , "web-html"
+  , "web-uievents"
   ]
 , packages = ./packages.dhall
 , sources = [ "src/**/*.purs", "test/**/*.purs" ]

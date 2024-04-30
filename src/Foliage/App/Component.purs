@@ -4,6 +4,7 @@ import Data.Tuple.Nested
 import Foliage.Program
 import Prelude
 import Control.Monad.Except (runExceptT)
+import Control.Monad.Trans.Class (lift)
 import Control.Monad.Writer (runWriterT)
 import Data.Array as Array
 import Data.Either (Either(..))
@@ -13,7 +14,10 @@ import Data.Map as Map
 import Data.Maybe (Maybe(..))
 import Effect.Aff (Aff)
 import Effect.Class.Console as Console
+import Foliage.App.Console.Component (Query(..))
+import Foliage.App.Console.Component as Console.Component
 import Foliage.App.Editor.Component as Editor.Component
+import Foliage.App.Style as Style
 import Foliage.App.Viewer.Component as Viewer.Component
 import Foliage.Example as Example
 import Foliage.Interpretation as Interpretation
@@ -45,12 +49,13 @@ component = mkComponent { initialState, eval, render }
       Viewer.Component.Ran -> do
         -- TODO
         program <- H.request _editor unit Editor.Component.GetProgram <#> Unsafe.fromJust "editor must exist"
+        H.tell _viewer unit (Viewer.Component.SetResult (Just (Viewer.Component.PendingResult)))
         Console.log "[App.run]"
         result <-
           Interpretation.interpProgram program
             # ( runWriterT
                   >=> \(a /\ logs) -> do
-                      -- TODO: do anything with the logs?
+                      H.tell _console unit (SetLogs logs) # lift
                       pure a
               )
             # runExceptT
@@ -63,21 +68,20 @@ component = mkComponent { initialState, eval, render }
             H.tell _viewer unit (Viewer.Component.SetResult (Just (Viewer.Component.OkResult { props: props # Array.fromFoldable })))
             pure unit
 
-  render _state =
-    HH.div [ HP.style $ "padding: 1em; width: calc(100vw - 2em); height: calc(100vh - 2em); " ]
-      [ HH.div [ HP.style $ "width: 100%; height: 100%; display: flex; flex-direction: column; gap: 1.0em;" ]
-          [ HH.div [] [ HH.text "Foliage" ]
-          , HH.div [ HP.style $ "width: 100%; height: 0.1em; background-color: black;" ] []
-          , HH.div [ HP.style $ "width: 100%; height: 100%; display: flex; flex-direction: row; gap: 1.0em;" ]
-              [ HH.div [ HP.style $ "flex-grow: 1; width: 100%; height: 100%; display: flex; flex-direction: column; gap: 1.0em; " ]
-                  [ HH.div [ HP.style $ "flex-grow: 1; " ]
-                      [ HH.slot _editor unit Editor.Component.component { program: Just (Example.blank # Lazy.force) } EditorOutput ]
-                  , HH.div [ HP.style $ "" ]
-                      [ HH.text "{console}" ]
+  render state =
+    HH.div [ Style.style $ [ "width: 100%" ] ]
+      [ HH.div [ Style.style $ Style.padding_big <> Style.flex_column <> [ "align-items: center" ] ]
+          [ HH.div [ Style.style $ [ "height: 2em" ] <> [ "vertical-align: center", "text-align: center" ] <> Style.font_fancy <> Style.underline ] [ HH.text "Foliage" ]
+          , HH.div [ Style.style $ [ "width: calc(100vw - 2em)", "height: calc(100vh - 5em)" ] <> Style.flex_row <> [ "gap: 0" ] ]
+              [ HH.div [ Style.style $ [ "height: 100%", "width: 50%", "overflow: scroll" ] <> Style.flex_column ]
+                  [ HH.div [ Style.style $ Style.padding_small ]
+                      [ HH.slot _editor unit Editor.Component.component { program: Just (Example.dijkstra # Lazy.force) } EditorOutput ]
                   ]
-              , HH.div [ HP.style $ "flex-grow: 1; width: 100%; height: 100%; display: flex; flex-direction: column; gap: 1.0em; " ]
-                  [ HH.div [ HP.style $ "flex-grow: 1; " ]
+              , HH.div [ Style.style $ [ "height: 100%", "width: 50%" ] <> Style.flex_column ]
+                  [ HH.div [ Style.style $ [ "flex-grow: 1", "flex-shrink: 1", "min-height: 10em", "overflow: scroll" ] <> Style.padding_small ]
                       [ HH.slot _viewer unit Viewer.Component.component {} ViewerOutput ]
+                  , HH.div [ Style.style $ [ "flex-grow: 1", "flex-shrink: 1", "min-height: 10em", "overflow: scroll" ] <> Style.padding_small ]
+                      [ HH.slot _console unit Console.Component.component {} absurd ]
                   ]
               ]
           ]
@@ -86,3 +90,5 @@ component = mkComponent { initialState, eval, render }
 _viewer = Proxy :: Proxy "viewer"
 
 _editor = Proxy :: Proxy "editor"
+
+_console = Proxy :: Proxy "console"

@@ -12,11 +12,18 @@ import Data.List (List(..))
 import Data.Map (Map)
 import Data.Map as Map
 import Data.Maybe (Maybe(..), fromMaybe)
-import Data.Newtype (class Newtype)
+import Data.Newtype (class Newtype, wrap)
 import Data.Show.Generic (genericShow)
 import Data.Traversable (class Traversable)
 import Data.Tuple.Nested (type (/\), (/\))
+import Effect.Ref (Ref)
+import Effect.Ref as Ref
+import Effect.Unsafe (unsafePerformEffect)
 import Partial.Unsafe (unsafeCrashWith)
+import Prim.Row (class Cons)
+import Record as Record
+import Type.Proxy (Proxy(..))
+import Unsafe (todo)
 
 data Program
   = Program
@@ -37,6 +44,8 @@ instance _DecodeJson_Program :: DecodeJson Program where
 
 instance _EncodeJson_Program :: EncodeJson Program where
   encodeJson x = genericEncodeJson x
+
+lookupModule label k = (\(Module mod) -> mod) >>> Record.get label >>> Map.lookup k
 
 data Module
   = Module
@@ -63,7 +72,7 @@ instance _EncodeJson_Module :: EncodeJson Module where
   encodeJson x = genericEncodeJson x
 
 data DataTypeDef
-  = ExternalDataTypeDef Name
+  = ExternalDataTypeDef String
   | DataTypeDef DataType
 
 derive instance _Generic_DataTypeDef :: Generic DataTypeDef _
@@ -82,6 +91,7 @@ instance _EncodeJson_DataTypeDef :: EncodeJson DataTypeDef where
 
 data DataType
   = UnitDataType
+  | NamedDataType Name
   | SumDataType DataType DataType
   | ProductDataType DataType DataType
   | SetDataType DataType
@@ -102,6 +112,7 @@ instance _EncodeJson_DataType :: EncodeJson DataType where
 
 data LatticeTypeDef
   = LatticeTypeDef LatticeType
+  | ExternalLatticeTypeDef { name :: String, compare :: String }
 
 derive instance _Generic_LatticeTypeDef :: Generic LatticeTypeDef _
 
@@ -118,11 +129,13 @@ instance _EncodeJson_LatticeTypeDef :: EncodeJson LatticeTypeDef where
   encodeJson x = genericEncodeJson x
 
 data LatticeType
-  = UnitLatticeType
+  = NamedLatticeType Name
+  | UnitLatticeType
   | SumLatticeType SumLatticeTypeOrdering LatticeType LatticeType
   | ProductLatticeType ProductLatticeTypeOrdering LatticeType LatticeType
   | SetLatticeType SetOrdering LatticeType
   | OppositeLatticeType LatticeType
+  | DiscreteLatticeType LatticeType
   | PowerLatticeType LatticeType
 
 derive instance _Generic_LatticeType :: Generic LatticeType _
@@ -194,7 +207,11 @@ instance _EncodeJson_SetOrdering :: EncodeJson SetOrdering where
   encodeJson x = genericEncodeJson x
 
 data FunctionDef
-  = ExternalFunctionDef Name
+  = ExternalFunctionDef
+    { name :: String
+    , inputs :: Array (String /\ DataType)
+    , output :: DataType
+    }
 
 derive instance _Generic_FunctionDef :: Generic FunctionDef _
 
@@ -231,8 +248,8 @@ instance _EncodeJson_Relation :: EncodeJson Relation where
 
 data Rule
   = Rule
-    { hypotheses :: List (PropF Name)
-    , conclusion :: PropF Name
+    { hypotheses :: List Hypothesis
+    , conclusion :: Prop
     }
 
 derive instance _Generic_Rule :: Generic Rule _
@@ -260,10 +277,52 @@ nextHypothesis ::
   Rule ->
   Either
     Prop
-    (Prop /\ Rule)
+    (Hypothesis /\ Rule)
 nextHypothesis (Rule rule) = case rule.hypotheses of
   Nil -> Left rule.conclusion
   Cons p ps -> Right (p /\ Rule rule { hypotheses = ps })
+
+data Hypothesis
+  = Hypothesis Prop (Array SideHypothesis)
+
+derive instance _Generic_Hypothesis :: Generic Hypothesis _
+
+instance _Eq_Hypothesis :: Eq Hypothesis where
+  eq x = genericEq x
+
+instance _Show_Hypothesis :: Show Hypothesis where
+  show x = genericShow x
+
+instance _DecodeJson_Hypothesis :: DecodeJson Hypothesis where
+  decodeJson x = genericDecodeJson x
+
+instance _EncodeJson_Hypothesis :: EncodeJson Hypothesis where
+  encodeJson x = genericEncodeJson x
+
+substHypothesis :: TermSubst -> Hypothesis -> Hypothesis
+substHypothesis sigma = case _ of
+  Hypothesis prop sides -> Hypothesis (prop # substProp sigma) (sides <#> substSideHypothesis sigma)
+
+data SideHypothesis
+  = FunctionSideHypothesis { resultVarName :: Name, functionName :: Name, args :: Array Term }
+
+derive instance _Generic_SideHypothesis :: Generic SideHypothesis _
+
+instance _Eq_SideHypothesis :: Eq SideHypothesis where
+  eq x = genericEq x
+
+instance _Show_SideHypothesis :: Show SideHypothesis where
+  show x = genericShow x
+
+instance _DecodeJson_SideHypothesis :: DecodeJson SideHypothesis where
+  decodeJson x = genericDecodeJson x
+
+instance _EncodeJson_SideHypothesis :: EncodeJson SideHypothesis where
+  encodeJson x = genericEncodeJson x
+
+substSideHypothesis :: TermSubst -> SideHypothesis -> SideHypothesis
+substSideHypothesis sigma = case _ of
+  FunctionSideHypothesis side -> FunctionSideHypothesis side { args = side.args <#> substTerm sigma }
 
 type Prop
   = PropF Name
@@ -300,6 +359,7 @@ type Term
 data TermF x
   = VarTerm x
   | UnitTerm
+  | LiteralTerm String DataType
   | LeftTerm (TermF x)
   | RightTerm (TermF x)
   | PairTerm (TermF x) (TermF x)
@@ -331,7 +391,7 @@ type TermSubst
 substRule :: TermSubst -> Rule -> Rule
 substRule sigma (Rule rule) =
   Rule
-    { hypotheses: rule.hypotheses <#> substProp sigma
+    { hypotheses: rule.hypotheses <#> substHypothesis sigma
     , conclusion: rule.conclusion # substProp sigma
     }
 
@@ -340,6 +400,8 @@ substProp sigma (Prop p t) = Prop p (substTerm sigma t)
 
 substTerm :: TermSubst -> Term -> Term
 substTerm sigma (VarTerm x) = Map.lookup x sigma # fromMaybe (VarTerm x)
+
+substTerm _sigma (LiteralTerm s dty) = LiteralTerm s dty
 
 substTerm _sigma UnitTerm = UnitTerm
 
@@ -352,7 +414,16 @@ substTerm sigma (PairTerm s t) = PairTerm (substTerm sigma s) (substTerm sigma t
 substTerm sigma (SetTerm ts) = SetTerm (ts <#> substTerm sigma)
 
 freshName :: Unit -> Name
-freshName _ = unsafeCrashWith "freshName"
+freshName _ =
+  unsafePerformEffect do
+    n <- freshNameIndexRef # Ref.read # map (\i -> wrap (show i))
+    freshNameIndexRef # Ref.modify_ (_ + 1)
+    pure n
+
+freshNameIndexRef :: Ref Int
+freshNameIndexRef =
+  unsafePerformEffect do
+    0 # Ref.new
 
 -- | LatticeOrdering:
 -- | - `a = b` if there exists a substitution of `a` and a substitution of `b`
@@ -360,10 +431,8 @@ freshName _ = unsafeCrashWith "freshName"
 -- | - `a < b` if there exists a substitution of `b` such that `a` is subsumed
 -- |   by `b`
 -- | - `a > b` if `b < a`.
-data LatticeOrdering
-  = LessThan TermSubst
-  | GreaterThan TermSubst
-  | Equal TermSubst
+type LatticeOrdering
+  = Ordering /\ TermSubst
 
 newtype Name
   = Name String

@@ -2,7 +2,6 @@ module Foliage.App.Editor.Component where
 
 import Data.Tuple.Nested
 import Prelude
-
 import BrowserUtility (getJsonFromChangeInputFile, saveJson)
 import Control.Monad.State (get, modify_)
 import Data.Argonaut (decodeJson, encodeJson, printJsonDecodeError)
@@ -15,7 +14,7 @@ import Data.Newtype (unwrap)
 import Effect.Aff (Aff)
 import Effect.Class.Console as Console
 import Foliage.App.ComponentLibrary.DropdownMenu as DropdownMenu
-import Foliage.App.Rendering (renderProgram)
+import Foliage.App.Rendering as Rendering
 import Foliage.App.Style as Style
 import Foliage.Example as Example
 import Foliage.Program (Module(..), Name(..), Program(..), mainModuleName)
@@ -115,7 +114,7 @@ component = mkComponent { initialState, eval, render }
       set_program program
 
   render state =
-    HH.div [ Style.style $ Style.rounded <> Style.padding_big <> Style.shadowed <> Style.font_code <> Style.flex_column <> [ "gap: 1.0em" ] ]
+    HH.div [ Style.style $ Style.font_code <> Style.flex_column <> [ "gap: 1.0em" ] ]
       ( Array.concat
           [ [ HH.div [ Style.style $ Style.flex_row ]
                 let
@@ -148,21 +147,7 @@ component = mkComponent { initialState, eval, render }
                           in
                             [ label "Blank" /\ Example.blank
                             , label "Example 1" /\ Example.example1
-                            , label "Example 1" /\ Example.example1
-                            , label "Example 1" /\ Example.example1
-                            , label "Example 1" /\ Example.example1
-                            , label "Example 1" /\ Example.example1
-                            , label "Example 1" /\ Example.example1
-                            , label "Example 1" /\ Example.example1
-                            , label "Example 1" /\ Example.example1
-                            , label "Example 1" /\ Example.example1
-                            , label "Example 1" /\ Example.example1
-                            , label "Example 1" /\ Example.example1
-                            , label "Example 1" /\ Example.example1
-                            , label "Example 1" /\ Example.example1
-                            , label "Example 1" /\ Example.example1
-                            , label "Example 1" /\ Example.example1
-                            , label "Example 1" /\ Example.example1
+                            , label "Dijkstra" /\ Example.dijkstra
                             ]
                       }
                       (SetProgram <<< Lazy.force)
@@ -171,6 +156,8 @@ component = mkComponent { initialState, eval, render }
           , case state.load_error of
               Nothing -> []
               Just err -> [ HH.div [ Style.style $ Style.color_error ] [ HH.text err ] ]
-          , [ renderProgram state.program ]
+          , [ HH.div [ Style.style $ Style.flex_column <> [ "overflow: scroll" ] ]
+                (state.program # Rendering.render # map HH.fromPlainHTML)
+            ]
           ]
       )

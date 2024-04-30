@@ -30,9 +30,13 @@ font_code = [ "font-family: monospace" ]
 
 font_prose = [ "font-family: serif" ]
 
+font_fancy = [ "font-family: cursive" ]
+
 bold = [ "font-weight: bold" ]
 
 italic = [ "font-style: italic" ]
+
+underline = [ "text-decoration: underline" ]
 
 font_size_small = [ "font-size: 0.8em" ]
 
@@ -45,3 +49,5 @@ button_secondary = rounded <> [ "border: none", "background-color: gray", "color
 color_error = [ "color: red" ]
 
 hidden = [ "display: none", "visibility: hidden" ]
+
+horizontal_bar = [ "width: 100%", "height: 2px", "background-color: black", "border-radius: 50px" ]

@@ -1,13 +1,13 @@
 module Foliage.App.Viewer.Component where
 
 import Prelude
-
 import Data.Array as Array
 import Data.List (List)
 import Data.Maybe (Maybe(..))
 import Effect.Aff (Aff)
 import Effect.Class.Console as Console
-import Foliage.App.Rendering (renderProp)
+import Foliage.App.Rendering (line)
+import Foliage.App.Rendering as Rendering
 import Foliage.App.Style as Style
 import Foliage.Interpretation as Foliage.Interpretation
 import Foliage.Program (Prop)
@@ -27,6 +27,7 @@ type State
 
 data Result
   = OkResult { props :: Array Prop }
+  | PendingResult
   | ErrResult { err :: Foliage.Interpretation.Err }
 
 data Output
@@ -53,7 +54,7 @@ component = mkComponent { initialState, eval, render }
     Run -> H.raise Ran
 
   render state =
-    HH.div [ Style.style $ Style.rounded <> Style.padding_big <> Style.shadowed <> Style.font_code <> Style.flex_column <> [ "gap: 1.0em" ] ]
+    HH.div [ Style.style $ Style.font_code <> Style.flex_column <> [ "gap: 1.0em" ] ]
       ( Array.concat
           [ [ HH.div []
                 [ HH.div [ Style.style $ Style.flex_row ]
@@ -72,13 +73,18 @@ component = mkComponent { initialState, eval, render }
               Nothing -> []
               Just (ErrResult res) ->
                 [ HH.div [ Style.style $ Style.font_code <> Style.flex_column ]
-                    [ HH.div [ Style.style $ Style.color_error ]
+                    [ HH.div [ Style.style $ Style.color_error <> [ "white-space: pre", "overflow: scroll" ] ]
                         [ show res.err # HH.text ]
                     ]
                 ]
+              Just PendingResult ->
+                [ HH.div [ Style.style $ Style.font_prose ]
+                    [ HH.text "running..." ]
+                ]
               Just (OkResult res) ->
-                [ HH.div [ Style.style $ Style.font_code <> Style.flex_column ]
-                    (res.props # map \prop -> HH.div [] [ prop # renderProp ])
+                [ HH.div [ Style.style $ Style.font_code <> Style.flex_column <> [ "overflow: scroll" ] ]
+                    -- (res.props # map (\prop -> line (prop # Rendering.render # map ?a)) # Array.fold)
+                    (res.props # map (Rendering.render >>> Rendering.line >>> HH.span_ >>> HH.fromPlainHTML))
                 ]
           ]
       )

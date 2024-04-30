@@ -6,7 +6,7 @@ import Data.Lazy as Lazy
 import Data.List (List(..), (:))
 import Data.Map as Map
 import Data.Tuple.Nested ((/\))
-import Foliage.Program (LatticeType(..), Module(..), Name(..), Program(..), PropF(..), Relation(..), Rule(..), TermF(..), mainModuleName)
+import Foliage.Program (Hypothesis(..), LatticeType(..), Module(..), Name(..), Program(..), PropF(..), Relation(..), Rule(..), TermF(..), mainModuleName)
 
 example1 :: Lazy Program
 example1 =
@@ -34,7 +34,7 @@ example1 =
                               }
                       , Name "S1"
                           /\ Rule
-                              { hypotheses: Prop (Name "R") UnitTerm : Nil
+                              { hypotheses: Hypothesis (Prop (Name "R") UnitTerm) [] : Nil
                               , conclusion: Prop (Name "S") UnitTerm
                               }
                       ]

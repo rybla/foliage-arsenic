@@ -55,7 +55,7 @@ test_example =
                                     }
                             , Name "S1"
                                 /\ Rule
-                                    { hypotheses: Prop (Name "R") UnitTerm : Nil
+                                    { hypotheses: Hypothesis (Prop (Name "R") UnitTerm) [] : Nil
                                     , conclusion: Prop (Name "S") UnitTerm
                                     }
                             ]
