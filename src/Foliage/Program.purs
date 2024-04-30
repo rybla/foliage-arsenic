@@ -16,6 +16,7 @@ import Data.Newtype (class Newtype, wrap)
 import Data.Show.Generic (genericShow)
 import Data.Traversable (class Traversable)
 import Data.Tuple.Nested (type (/\), (/\))
+import Debug as Debug
 import Effect.Ref (Ref)
 import Effect.Ref as Ref
 import Effect.Unsafe (unsafePerformEffect)
@@ -390,10 +391,13 @@ type TermSubst
 
 substRule :: TermSubst -> Rule -> Rule
 substRule sigma (Rule rule) =
-  Rule
-    { hypotheses: rule.hypotheses <#> substHypothesis sigma
-    , conclusion: rule.conclusion # substProp sigma
-    }
+  Debug.trace ("substRule.sigma: " <> show sigma) \_ ->
+    Debug.trace ("substRule.before: " <> show (Rule rule)) \_ ->
+      Debug.spyWith "substRule.after: " show
+        $ Rule
+            { hypotheses: rule.hypotheses <#> substHypothesis sigma
+            , conclusion: rule.conclusion # substProp sigma
+            }
 
 substProp :: TermSubst -> Prop -> Prop
 substProp sigma (Prop p t) = Prop p (substTerm sigma t)

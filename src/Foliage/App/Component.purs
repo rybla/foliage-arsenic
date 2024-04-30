@@ -60,11 +60,13 @@ component = mkComponent { initialState, eval, render }
             # runExceptT
         )
           >>= case _ of
-              Left err -> H.tell _viewer unit (Viewer.Component.SetResult (Just (Viewer.Component.ErrResult { err })))
+              Left err -> do
+                Debug.traceM (show err)
+                H.tell _viewer unit (Viewer.Component.SetResult (Just (Viewer.Component.ErrResult { err })))
               Right (mb_err /\ Env env) -> do
-                Console.logShow { mb_err, env }
                 mb_err
                   # maybe (pure unit) \err -> do
+                      Debug.traceM (show err)
                       H.tell _viewer unit (Viewer.Component.SetResult (Just (Viewer.Component.ErrResult { err })))
                 H.tell _viewer unit (Viewer.Component.SetResult (Just (Viewer.Component.OkResult { props: env.known_props # Array.fromFoldable })))
         pure unit

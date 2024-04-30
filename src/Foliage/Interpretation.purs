@@ -8,12 +8,13 @@ module Foliage.Interpretation
 
 import Foliage.Program
 import Prelude
-import Control.Monad.Trans.Class (lift)
+import Control.Bind (bindFlipped)
 import Control.Monad.Error.Class (class MonadThrow)
 import Control.Monad.Except (ExceptT, runExceptT, throwError)
 import Control.Monad.Maybe.Trans (MaybeT, runMaybeT)
 import Control.Monad.Reader (class MonadReader, ask, runReaderT)
 import Control.Monad.State (class MonadState, get, modify, modify_, runStateT)
+import Control.Monad.Trans.Class (lift)
 import Control.Monad.Writer (class MonadTell, class MonadWriter, tell)
 import Control.Plus (empty)
 import Data.Array as Array
@@ -25,7 +26,7 @@ import Data.List (List(..), (:))
 import Data.List as List
 import Data.Map (Map)
 import Data.Map as Map
-import Data.Maybe (Maybe(..), maybe)
+import Data.Maybe (Maybe(..), fromMaybe, maybe)
 import Data.Newtype (class Newtype)
 import Data.Show.Generic (genericShow)
 import Data.String.CodeUnits (fromCharArray)
@@ -170,7 +171,32 @@ interpProgram (Program prog) = do
 externalFunctions :: Map String (Map String Term -> Either String Term)
 externalFunctions =
   Map.fromFoldable
-    []
+    [ let
+        f = "addWeight"
+      in
+        f
+          /\ \args -> do
+              w1 <- let x = "w1" in args # getArg { f, x } (validateInt { f, x })
+              w2 <- let x = "w2" in args # getArg { f, x } (validateInt { f, x })
+              let
+                w = w1 + w2
+              pure (LiteralTerm (Int.toStringAs Int.decimal w) intDataType)
+    ]
+  where
+  getArg :: forall r a. { f :: String, x :: String | r } -> (Term -> Either String a) -> _ -> Either String a
+  getArg { f, x } validate args =
+    Map.lookup x args
+      # maybe (throwExternalFunctionCallError f $ "no argument " <> show x) pure
+      # bindFlipped validate
+
+  validateInt :: forall r. { f :: String, x :: String | r } -> Term -> Either String Int
+  validateInt { f, x } = case _ of
+    LiteralTerm s dty
+      | dty == intDataType -> s # Int.fromString # maybe (throwExternalFunctionCallError f $ s <> " is not an Int") pure
+    t -> throwExternalFunctionCallError f $ "expected arg " <> x <> " = " <> show t <> " to be an Int"
+
+  throwExternalFunctionCallError :: forall a. String -> String -> Either String a
+  throwExternalFunctionCallError f msg = throwError $ "when calling external function " <> f <> ", " <> msg
 
 externalCompares :: Map String (String -> String -> Either String Ordering)
 externalCompares =
@@ -181,6 +207,9 @@ externalCompares =
             y :: Int <- Int.fromString y # maybe (throwError $ "when comparing " <> show x <> " and " <> show y <> " as external lattice type \"Int\", expected " <> show y <> " to be a literal integer") pure
             pure (compare x y)
     ]
+
+intDataType :: DataType
+intDataType = NamedDataType (Name "Int")
 
 --------------------------------------------------------------------------------
 -- Implementation
