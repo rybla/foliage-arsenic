@@ -1,14 +1,14 @@
 module Foliage.App.Component where
 
-import Prelude
 import Foliage.Program
+import Prelude
 import Control.Monad.Except (runExceptT)
 import Control.Monad.Trans.Class (lift)
 import Control.Monad.Writer (runWriterT)
 import Data.Array as Array
 import Data.Either (Either(..))
 import Data.Lazy as Lazy
-import Data.Maybe (Maybe(..))
+import Data.Maybe (Maybe(..), maybe)
 import Data.Traversable (traverse_)
 import Data.Tuple.Nested ((/\))
 import Debug as Debug
@@ -20,8 +20,9 @@ import Foliage.App.Editor.Component as Editor.Component
 import Foliage.App.Style as Style
 import Foliage.App.Viewer.Component as Viewer.Component
 import Foliage.Example as Example
+import Foliage.Interpretation (Env(..))
 import Foliage.Interpretation as Interpretation
-import Halogen (Component, defaultEval, mkComponent, mkEval)
+import Halogen (Component, HalogenM, defaultEval, mkComponent, mkEval)
 import Halogen as H
 import Halogen.HTML as HH
 import Type.Proxy (Proxy(..))
@@ -50,23 +51,23 @@ component = mkComponent { initialState, eval, render }
         program <- H.request _editor unit Editor.Component.GetProgram <#> Unsafe.fromJust "editor must exist"
         H.tell _viewer unit (Viewer.Component.SetResult (Just (Viewer.Component.PendingResult)))
         Console.log "[App.run]"
-        result <-
-          Interpretation.interpProgram program
+        ( Interpretation.interpProgram program
             # ( runWriterT
                   >=> \(a /\ logs) -> do
-                      logs # traverse_ (Debug.traceM <<< show)
                       H.tell _console unit (SetLogs logs) # lift
                       pure a
               )
             # runExceptT
-        Console.logShow { result }
-        case result of
-          Left err -> do
-            H.tell _viewer unit (Viewer.Component.SetResult (Just (Viewer.Component.ErrResult { err })))
-            pure unit
-          Right props -> do
-            H.tell _viewer unit (Viewer.Component.SetResult (Just (Viewer.Component.OkResult { props: props # Array.fromFoldable })))
-            pure unit
+        )
+          >>= case _ of
+              Left err -> H.tell _viewer unit (Viewer.Component.SetResult (Just (Viewer.Component.ErrResult { err })))
+              Right (mb_err /\ Env env) -> do
+                Console.logShow { mb_err, env }
+                mb_err
+                  # maybe (pure unit) \err -> do
+                      H.tell _viewer unit (Viewer.Component.SetResult (Just (Viewer.Component.ErrResult { err })))
+                H.tell _viewer unit (Viewer.Component.SetResult (Just (Viewer.Component.OkResult { props: env.props # Array.fromFoldable })))
+        pure unit
 
   render state =
     HH.div [ Style.style $ [ "width: 100%" ] ]

@@ -1,17 +1,24 @@
-module Foliage.Interpretation (interpProgram, Log(..), Err(..)) where
+module Foliage.Interpretation
+  ( interpProgram
+  , Log(..)
+  , Err(..)
+  , Env(..)
+  , LogMessage(..)
+  ) where
 
+import Foliage.Program
 import Prelude
 import Control.Monad.Error.Class (class MonadThrow)
-import Control.Monad.Except (throwError)
+import Control.Monad.Except (runExceptT, throwError)
 import Control.Monad.Maybe.Trans (MaybeT, runMaybeT)
 import Control.Monad.Reader (class MonadReader, ask, runReaderT)
-import Control.Monad.State (class MonadState, execStateT, get, modify, modify_)
+import Control.Monad.State (class MonadState, get, modify, modify_, runStateT)
 import Control.Monad.Writer (class MonadTell, class MonadWriter, tell)
 import Control.Plus (empty)
 import Data.Array as Array
 import Data.Bifunctor (lmap, rmap)
 import Data.Either (Either(..), either)
-import Data.Foldable (length)
+import Data.Generic.Rep (class Generic)
 import Data.Int as Int
 import Data.List (List(..), (:))
 import Data.List as List
@@ -19,14 +26,14 @@ import Data.Map (Map)
 import Data.Map as Map
 import Data.Maybe (Maybe(..), maybe)
 import Data.Newtype (class Newtype)
+import Data.Show.Generic (genericShow)
 import Data.String.CodeUnits (fromCharArray)
 import Data.Traversable (traverse)
 import Data.Tuple (fst)
 import Data.Tuple.Nested (type (/\), (/\))
 import Debug as Debug
-import Effect.Class (class MonadEffect)
-import Foliage.Program (FunctionDef(..), Hypothesis(..), LatticeOrdering, LatticeType(..), LatticeTypeDef(..), Module(..), Name, ProductLatticeTypeOrdering(..), Program(..), Prop, PropF(..), Relation(..), Rule(..), SideHypothesis(..), SumLatticeTypeOrdering(..), Term, TermF(..), freshName, lookupModule, mainModuleName, nextHypothesis, substRule, substTerm)
 import Type.Proxy (Proxy(..))
+import Unsafe (todo)
 import Unsafe as Unsafe
 
 --------------------------------------------------------------------------------
@@ -79,22 +86,34 @@ instance _Show_Err :: Show Err where
 newtype Log
   = Log
   { label :: String
-  , message :: String
+  , messages :: Array LogMessage
   }
 
 derive instance _Newtype_Log :: Newtype Log _
 
 instance _Show_Log :: Show Log where
-  show (Log log) = "[" <> log.label <> "] " <> log.message
+  show (Log log) = "[" <> log.label <> "] " <> ((log.messages <#> show) # Array.intercalate "  ")
+
+data LogMessage
+  = StringLogMessage String
+  | RuleLogMessage Rule
+  | PropLogMessage Prop
+  | TermLogMessage Term
+
+derive instance _Generic_LogMessage :: Generic LogMessage _
+
+instance _Show_LogMessage :: Show LogMessage where
+  show = genericShow
 
 --------------------------------------------------------------------------------
 -- Endpoints
 --------------------------------------------------------------------------------
 interpProgram ::
   forall m.
+  Monad m =>
   MonadWriter (Array Log) m =>
   MonadThrow Err m =>
-  Program -> m (List Prop)
+  Program -> m (Maybe Err /\ Env)
 interpProgram (Program prog) = do
   focusModule@(Module main) <- lookup "module Main" mainModuleName prog.modules
   Debug.traceM "[interpProgram]"
@@ -125,11 +144,12 @@ interpProgram (Program prog) = do
           , rules
           , props
           }
-  Env env' <-
+  err_or_unit /\ env' <-
     fixpointFocusModule
+      # runExceptT
       # flip runReaderT ctx
-      # flip execStateT env
-  pure env'.props
+      # flip runStateT env
+  pure ((err_or_unit # either Just (const Nothing)) /\ env')
 
 externalFunctions :: Map String (Map String Term -> Either String Term)
 externalFunctions =
@@ -201,7 +221,7 @@ learnProp prop = do
           )
           (true /\ Nil)
   if keep_prop then do
-    tell [ Log { label: "learn", message: show prop } ]
+    tell [ Log { label: "learn", messages: [ prop # PropLogMessage ] } ]
     modify_ (\(Env env') -> (Env env' { props = prop : props }))
     -- activate any rules that can be applied to `prop`
     new_active_rules <-
@@ -214,7 +234,7 @@ learnProp prop = do
         # map List.fold
     modify_ (\(Env env') -> (Env env' { rules = new_active_rules <> env'.rules }))
   else do
-    tell [ Log { label: "ignore", message: show prop } ]
+    tell [ Log { label: "ignore", messages: [ prop # PropLogMessage ] } ]
 
 applyRuleToProp ::
   forall m.

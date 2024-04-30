@@ -8,7 +8,7 @@ import Effect.Aff (Aff)
 import Foliage.App.Rendering (Html, (⊕))
 import Foliage.App.Rendering as Rendering
 import Foliage.App.Style as Style
-import Foliage.Interpretation (Log(..))
+import Foliage.Interpretation (Log(..), LogMessage(..))
 import Halogen as H
 import Halogen.HTML as HH
 
@@ -36,8 +36,14 @@ component = H.mkComponent { initialState, eval, render }
 
   renderLog (Log log) =
     [ HH.div [ Style.style $ Style.italic <> Style.underline <> [ "padding-right: 0.5em" ] ] [ HH.text log.label :: Html ] ]
-      ⊕ [ HH.div [] [ HH.text log.message :: Html ] ]
+      ⊕ (log.messages # map (renderLogMessage >>> (\e -> HH.div [ Style.style $ [ "display: inline-flex", "flex-direction: row", "gap: 0.2em", "flex-wrap: wrap" ] ] e)))
       ⊕ []
+
+  renderLogMessage = case _ of
+    StringLogMessage str -> [ HH.div [] [ HH.text str :: Html ] ]
+    RuleLogMessage rule -> rule ⊕ []
+    PropLogMessage prop -> prop ⊕ []
+    TermLogMessage term -> term ⊕ []
 
   render state =
     HH.div [ Style.style $ Style.flex_column <> Style.font_code ]
