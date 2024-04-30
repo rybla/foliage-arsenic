@@ -90,15 +90,14 @@ definition sort name body =
 instance _Render_Rule :: Render Rule where
   render (Rule rule) =
     [ HH.div [ Style.style $ Style.flex_column ]
-        ( [ if List.null rule.hypotheses then
-              line (Punc "∅" ⊕ [])
-            else
-              rule.hypotheses # map render # List.fold
+        if List.null rule.hypotheses then
+          line (rule.conclusion ⊕ [])
+        else
+          [ rule.hypotheses # map render # List.fold
           , [ HH.div [ Style.style $ Style.horizontal_bar ] [] ]
           , line (rule.conclusion ⊕ [])
           ]
             # Array.concat
-        )
     ]
 
 instance _Render_LatticeType :: Render LatticeType where

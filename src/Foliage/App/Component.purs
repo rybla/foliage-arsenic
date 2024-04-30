@@ -66,7 +66,7 @@ component = mkComponent { initialState, eval, render }
                 mb_err
                   # maybe (pure unit) \err -> do
                       H.tell _viewer unit (Viewer.Component.SetResult (Just (Viewer.Component.ErrResult { err })))
-                H.tell _viewer unit (Viewer.Component.SetResult (Just (Viewer.Component.OkResult { props: env.props # Array.fromFoldable })))
+                H.tell _viewer unit (Viewer.Component.SetResult (Just (Viewer.Component.OkResult { props: env.known_props # Array.fromFoldable })))
         pure unit
 
   render state =
