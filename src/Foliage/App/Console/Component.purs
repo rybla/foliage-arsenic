@@ -9,6 +9,7 @@ import Foliage.App.Rendering (Html, (⊕))
 import Foliage.App.Rendering as Rendering
 import Foliage.App.Style as Style
 import Foliage.Interpretation (Log(..), LogMessage(..))
+import Foliage.Program (from_RipeRule_to_Rule)
 import Halogen as H
 import Halogen.HTML as HH
 
@@ -35,20 +36,24 @@ component = H.mkComponent { initialState, eval, render }
   handleAction _ = pure unit
 
   renderLog (Log log) =
-    [ HH.div [ Style.style $ Style.italic <> Style.underline <> [ "padding-right: 0.5em" ] ] [ HH.text log.label :: Html ] ]
-      ⊕ (log.messages # map (renderLogMessage >>> (\e -> HH.div [ Style.style $ [ "display: inline-flex", "flex-direction: row", "gap: 0.2em", "flex-wrap: wrap" ] ] e)))
-      ⊕ []
+    HH.div [ Style.style $ Style.flex_column <> [] ]
+      [ HH.div [ Style.style $ Style.bold <> [ "box-shadow: 0 0 0 1px black", "padding-right: 0.5em" ] ] [ HH.text log.label :: Html ]
+      , HH.div [ Style.style $ [ "padding-left: 1.0em", "display: flex", "flex-direction: column", "gap: 0.5em" ] ]
+          (log.messages # map (renderLogMessage >>> HH.div [ Style.style $ [ "display: flex", "flex-direction: row", "gap: 0.2em" ] <> [ "border-bottom: 1px solid black" ] ]))
+      ]
 
   renderLogMessage = case _ of
     StringLogMessage str -> [ HH.div [] [ HH.text str :: Html ] ]
-    RuleLogMessage rule -> rule ⊕ []
-    PropLogMessage prop -> prop ⊕ []
-    TermLogMessage term -> term ⊕ []
+    RuleLogMessage label rule -> [ HH.div [ Style.style $ Style.underline <> [ "padding-right: 0.2em", "width: 6em", "text-align: right", "border-right: 1px solid black" ] ] [ label # HH.text :: Html ] ] ⊕ rule ⊕ []
+    RipeRuleLogMessage label ripe_rule -> [ HH.div [ Style.style $ Style.underline <> [ "padding-right: 0.2em", "width: 6em", "text-align: right", "border-right: 1px solid black" ] ] [ label # HH.text :: Html ] ] ⊕ from_RipeRule_to_Rule ripe_rule ⊕ []
+    PropLogMessage label prop -> [ HH.div [ Style.style $ Style.underline <> [ "padding-right: 0.2em", "width: 6em", "text-align: right", "border-right: 1px solid black" ] ] [ label # HH.text :: Html ] ] ⊕ prop ⊕ []
+    TermLogMessage label term -> [ HH.div [ Style.style $ Style.underline <> [ "padding-right: 0.2em", "width: 6em", "text-align: right", "border-right: 1px solid black" ] ] [ label # HH.text :: Html ] ] ⊕ term ⊕ []
+    LatticeTypeLogMessage label lty -> [ HH.div [ Style.style $ Style.underline <> [ "padding-right: 0.2em", "width: 6em", "text-align: right", "border-right: 1px solid black" ] ] [ label # HH.text :: Html ] ] ⊕ lty ⊕ []
 
   render state =
-    HH.div [ Style.style $ Style.flex_column <> Style.font_code ]
+    HH.div [ Style.style $ Style.flex_column <> Style.font_code <> [ "gap: 1.0em" ] ]
       [ HH.div [ Style.style $ Style.flex_row ]
           [ HH.button [ Style.style $ Style.button ] [ HH.text "Clear" ] ]
-      , HH.div [ Style.style $ Style.flex_column <> [ "gap: 1.5em", "overflow: scroll" ] ]
-          (state.logs <#> renderLog >>> (HH.div [ Style.style $ [ "display: inline-flex", "flex-direction: row", "gap: 0.5em", "flex-wrap: wrap" ] ]) >>> HH.fromPlainHTML)
+      , HH.div [ Style.style $ Style.padding_small <> Style.flex_column <> [ "gap: 2em", "overflow: scroll" ] ]
+          (state.logs <#> renderLog >>> HH.fromPlainHTML)
       ]

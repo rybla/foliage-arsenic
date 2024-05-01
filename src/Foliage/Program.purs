@@ -8,23 +8,19 @@ import Data.Either (Either(..))
 import Data.Eq.Generic (genericEq)
 import Data.Foldable (class Foldable, null)
 import Data.Generic.Rep (class Generic)
-import Data.List (List(..))
+import Data.List (List(..), (:))
 import Data.Map (Map)
 import Data.Map as Map
 import Data.Maybe (Maybe(..), fromMaybe)
 import Data.Newtype (class Newtype, wrap)
 import Data.Show.Generic (genericShow)
 import Data.Traversable (class Traversable)
-import Data.Tuple.Nested (type (/\), (/\))
+import Data.Tuple.Nested (type (/\))
 import Debug as Debug
 import Effect.Ref (Ref)
 import Effect.Ref as Ref
 import Effect.Unsafe (unsafePerformEffect)
-import Partial.Unsafe (unsafeCrashWith)
-import Prim.Row (class Cons)
 import Record as Record
-import Type.Proxy (Proxy(..))
-import Unsafe (todo)
 
 data Program
   = Program
@@ -267,6 +263,12 @@ instance _DecodeJson_Rule :: DecodeJson Rule where
 instance _EncodeJson_Rule :: EncodeJson Rule where
   encodeJson x = genericEncodeJson x
 
+type RipeRule
+  = { hypothesis :: Hypothesis, rule' :: Rule }
+
+from_RipeRule_to_Rule :: RipeRule -> Rule
+from_RipeRule_to_Rule { hypothesis, rule': Rule { hypotheses, conclusion } } = Rule { hypotheses: hypothesis : hypotheses, conclusion }
+
 fromNoHypothesesRule :: Rule -> Maybe Prop
 fromNoHypothesesRule (Rule rule) =
   if null rule.hypotheses then
@@ -274,14 +276,10 @@ fromNoHypothesesRule (Rule rule) =
   else
     Nothing
 
-nextHypothesis ::
-  Rule ->
-  Either
-    Prop
-    (Hypothesis /\ Rule)
+nextHypothesis :: Rule -> Either Prop RipeRule
 nextHypothesis (Rule rule) = case rule.hypotheses of
   Nil -> Left rule.conclusion
-  Cons p ps -> Right (p /\ Rule rule { hypotheses = ps })
+  Cons hypothesis hypotheses -> Right { hypothesis, rule': Rule rule { hypotheses = hypotheses } }
 
 data Hypothesis
   = Hypothesis Prop (Array SideHypothesis)

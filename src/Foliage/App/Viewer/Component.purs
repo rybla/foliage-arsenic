@@ -28,7 +28,7 @@ type State
 data Result
   = OkResult { props :: Array Prop }
   | PendingResult
-  | ErrResult { err :: Foliage.Interpretation.Err }
+  | ErrResult { err :: Foliage.Interpretation.Exc "error", props :: Array Prop }
 
 data Output
   = Ran
@@ -72,10 +72,10 @@ component = mkComponent { initialState, eval, render }
           , case state.result of
               Nothing -> []
               Just (ErrResult res) ->
-                [ HH.div [ Style.style $ Style.font_code <> Style.flex_column ]
-                    [ HH.div [ Style.style $ Style.color_error <> [ "white-space: pre", "overflow: scroll" ] ]
-                        [ show res.err # HH.text ]
-                    ]
+                [ HH.div [ Style.style $ Style.font_code <> Style.flex_column <> [ "overflow: scroll" ] ]
+                    ( (res.props # map (Rendering.render >>> Rendering.line >>> HH.span_ >>> HH.fromPlainHTML))
+                        <> [ show res.err # HH.text ]
+                    )
                 ]
               Just PendingResult ->
                 [ HH.div [ Style.style $ Style.font_prose ]

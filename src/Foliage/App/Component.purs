@@ -47,7 +47,6 @@ component = mkComponent { initialState, eval, render }
         pure unit
     ViewerOutput output -> case output of
       Viewer.Component.Ran -> do
-        -- TODO
         program <- H.request _editor unit Editor.Component.GetProgram <#> Unsafe.fromJust "editor must exist"
         H.tell _viewer unit (Viewer.Component.SetResult (Just (Viewer.Component.PendingResult)))
         Console.log "[App.run]"
@@ -62,13 +61,11 @@ component = mkComponent { initialState, eval, render }
           >>= case _ of
               Left err -> do
                 Debug.traceM (show err)
-                H.tell _viewer unit (Viewer.Component.SetResult (Just (Viewer.Component.ErrResult { err })))
+                H.tell _viewer unit (Viewer.Component.SetResult (Just (Viewer.Component.ErrResult { err, props: mempty })))
               Right (mb_err /\ Env env) -> do
-                mb_err
-                  # maybe (pure unit) \err -> do
-                      Debug.traceM (show err)
-                      H.tell _viewer unit (Viewer.Component.SetResult (Just (Viewer.Component.ErrResult { err })))
-                H.tell _viewer unit (Viewer.Component.SetResult (Just (Viewer.Component.OkResult { props: env.known_props # Array.fromFoldable })))
+                case mb_err of
+                  Nothing -> H.tell _viewer unit (Viewer.Component.SetResult (Just (Viewer.Component.OkResult { props: env.known_props # Array.fromFoldable })))
+                  Just err -> H.tell _viewer unit (Viewer.Component.SetResult (Just (Viewer.Component.ErrResult { err, props: env.known_props # Array.fromFoldable })))
         pure unit
 
   render state =
