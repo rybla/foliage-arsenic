@@ -61,10 +61,12 @@ component = mkComponent { initialState, eval, render }
           # fromMaybe
               ( Program
                   { name: Name "Main"
+                  , doc: Nothing
                   , modules:
                       Map.singleton mainModuleName
                         ( Module
                             { name: mainModuleName
+                            , doc: Nothing
                             , dataTypeDefs: Map.empty
                             , latticeTypeDefs: Map.empty
                             , functionDefs: Map.empty
@@ -127,9 +129,9 @@ component = mkComponent { initialState, eval, render }
                           [ HH.text label ]
                       ]
                 in
-                  [ button (const Save) "Save"
-                  , button (const Load) "Load"
-                  , HH.input
+                  -- [ button (const Save) "Save"
+                  -- , button (const Load) "Load"
+                  [ HH.input
                       [ HP.ref program_input_ref
                       , HP.type_ HP.InputFile
                       , HE.onChange ChangeProgramInput

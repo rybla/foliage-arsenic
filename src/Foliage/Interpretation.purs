@@ -6,26 +6,29 @@ module Foliage.Interpretation
   , LogMessage(..)
   ) where
 
-import Prelude
 import Foliage.Program
+import Prelude
 import Control.Bind (bindFlipped)
 import Control.Monad.Error.Class (class MonadThrow)
-import Control.Monad.Except (ExceptT, runExceptT, throwError)
+import Control.Monad.Except (ExceptT(..), mapExceptT, runExceptT, throwError)
 import Control.Monad.Reader (class MonadReader, ask, runReaderT)
 import Control.Monad.State (class MonadState, get, modify, modify_, runStateT)
 import Control.Monad.Trans.Class (lift)
-import Control.Monad.Writer (class MonadWriter, tell)
+import Control.Monad.Writer (class MonadWriter)
+import Control.Monad.Writer as Writer
 import Data.Array as Array
 import Data.Bifunctor (lmap, rmap)
 import Data.Either (Either(..), either)
 import Data.Generic.Rep (class Generic)
 import Data.Int as Int
+import Data.Lens (Forget(..), Getter', (^.))
+import Data.Lens.Record as Lens.Record
 import Data.List (List(..), (:))
 import Data.List as List
 import Data.Map (Map)
 import Data.Map as Map
 import Data.Maybe (Maybe(..), fromMaybe, maybe)
-import Data.Newtype (class Newtype)
+import Data.Newtype (class Newtype, over)
 import Data.Show.Generic (genericShow)
 import Data.Symbol (class IsSymbol, reflectSymbol)
 import Data.Traversable (traverse, traverse_)
@@ -33,6 +36,7 @@ import Data.Tuple (fst)
 import Data.Tuple.Nested (type (/\), (/\))
 import Debug as Debug
 import Type.Proxy (Proxy(..))
+import Unsafe (todo)
 import Unsafe as Unsafe
 
 --------------------------------------------------------------------------------
@@ -59,9 +63,8 @@ derive instance _Newtype_Ctx :: Newtype Ctx _
 newtype Env
   = Env
   { gas :: Int
-  , rules :: List Rule
-  , ripe_rules :: Map Name (List RipeRule)
-  , known_props :: List Prop
+  , ripe_rules :: Map Name (List RipeRule) -- prop name => ripe rules that have a head hypothesis of the prop name
+  , known_props :: Map Name (List Prop) -- prop name => instance of prop
   , active_props :: List { prop :: Prop, isNew :: Boolean }
   }
 
@@ -76,7 +79,12 @@ newtype Exc (label :: Symbol)
 
 _apply_rule = Proxy :: Proxy "apply rule"
 
+_compare = Proxy :: Proxy "compare"
+
 _error = Proxy :: Proxy "error"
+
+map_Exc_label :: forall label1 label2. Proxy label2 -> Exc label1 -> Exc label2
+map_Exc_label label (Exc exc) = Exc { label, source: exc.source, description: exc.description }
 
 derive instance _Newtype_Exc :: Newtype (Exc label) _
 
@@ -85,16 +93,19 @@ derive newtype instance _Eq_Exc :: Eq (Exc label)
 instance _Show_Exc :: IsSymbol label => Show (Exc label) where
   show (Exc { label, source, description }) = "[exc . " <> reflectSymbol label <> "] " <> source <> ": " <> description
 
-newtype Log
+data Log
   = Log
-  { label :: String
-  , messages :: Array LogMessage
-  }
-
-derive instance _Newtype_Log :: Newtype Log _
+    { label :: String
+    , messages :: Array LogMessage
+    }
+    (Maybe Env)
 
 instance _Show_Log :: Show Log where
-  show (Log log) = "[" <> log.label <> "] " <> ((log.messages <#> show) # Array.intercalate "  ")
+  show (Log log _env) = "[" <> log.label <> "] " <> ((log.messages <#> show) # Array.intercalate "  ")
+
+tellLog r = do
+  env <- get
+  Writer.tell [ Log r (Just env) ]
 
 data LogMessage
   = StringLogMessage String
@@ -132,34 +143,22 @@ interpProgram (Program prog) = do
 
     env =
       let
-        rules /\ active_props =
+        ripe_rules /\ active_props =
           main.rules # Map.values
             # partitionEither
                 ( \rule ->
                     rule
                       # nextHypothesis
                       # case _ of
-                          Left conclusion -> Right { prop: conclusion, isNew: true }
-                          Right _ -> Left rule
-                )
-
-        ripe_rules /\ _active_props =
-          main.rules # Map.values
-            # partitionEither
-                ( \rule ->
-                    rule
-                      # nextHypothesis
-                      # case _ of
-                          Left conclusion -> Right { prop: conclusion, isNew: true }
+                          Left conclusion -> Right { prop: conclusion, isNew: false }
                           Right { hypothesis: hypothesis@(Hypothesis (Prop prop_name _) _), rule' } -> Left (Map.singleton prop_name (List.singleton { hypothesis, rule' }))
                 )
             # lmap List.fold
       in
         Env
           { gas: initialGas
-          , rules
           , ripe_rules
-          , known_props: Nil
+          , known_props: active_props # map (\{ prop: prop@(Prop prop_name _) } -> Map.singleton prop_name (List.singleton prop)) # Map.unions
           , active_props
           }
   err_or_unit /\ env' <-
@@ -225,7 +224,7 @@ fixpointFocusModule ::
 fixpointFocusModule = do
   Env env <- modify \(Env env) -> (Env env { gas = env.gas - 1 })
   when (env.gas <= 0) do
-    tell [ Log { label: "error", messages: [ "out of gas" # StringLogMessage, show { initialGas } # StringLogMessage ] } ]
+    tellLog { label: "error", messages: [ "out of gas" # StringLogMessage, show { initialGas } # StringLogMessage ] }
     throwError (Exc { label: _error, source: "fixpointFocusModule", description: "ran out of gas" })
   case env.active_props of
     Nil -> pure unit
@@ -243,33 +242,61 @@ learnProp ::
   MonadThrow (Exc "error") m =>
   MonadWriter (Array Log) m =>
   Prop -> m Unit
-learnProp prop = do
+learnProp prop@(Prop prop_name _) = do
   Env env <- get
-  ignore_or_props <-
-    env.known_props
-      # List.foldM
-          ( \known_props prop' -> do
-              compareProp prop prop'
-                # runExceptT
-                # lift
-                # bindFlipped case _ of
-                    -- prop >< prop' ==> keep prop'
-                    Left _ -> pure (prop' : known_props)
-                    -- prop < prop' ==> prop is subsumed; keep prop'
-                    Right (LT /\ _) -> throwError (Exc { label: Proxy :: Proxy "ignore prop", source: "learnProp", description: "learned prop is subsumed by known props" })
-                    -- prop = prop' ==> prop is subsumed; keep prop'
-                    Right (EQ /\ _) -> throwError (Exc { label: Proxy :: Proxy "ignore prop", source: "learnProp", description: "learned prop is subsumed by known props" })
-                    -- prop > prop' ==> prop' is subsumed so drop prop'
-                    Right (GT /\ _) -> pure known_props
-          )
-          Nil
-      # runExceptT
-  case ignore_or_props of
-    Left (Exc exc) -> do
-      tell [ Log { label: "ignore prop", messages: [ exc # show # StringLogMessage ] } ]
-    Right known_props' -> do
-      tell [ Log { label: "learn prop", messages: [ prop # PropLogMessage "prop" ] } ]
-      modify_ \(Env env') -> Env env' { known_props = prop : known_props' }
+  let
+    failure exc = do
+      tellLog { label: "learn prop . failure", messages: [ exc # show # StringLogMessage ] }
+
+    success known_props' = do
+      tellLog { label: "learn prop . success", messages: [ prop # PropLogMessage "prop" ] }
+      modify_ \(Env env') -> Env env' { known_props = known_props' }
+  env.known_props # Map.lookup prop_name
+    # maybe (success Map.empty) \known_props ->
+        insertProp identity known_props prop
+          # bindFlipped case _ of
+              Left exc -> failure exc
+              Right known_props' -> success (env.known_props # Map.insert prop_name known_props')
+
+subsumedByProps ::
+  forall m a.
+  Monad m =>
+  MonadReader Ctx m =>
+  MonadThrow (Exc "error") m =>
+  MonadState Env m =>
+  MonadWriter (Array Log) m =>
+  Getter' a Prop -> List a -> a -> ExceptT (Exc "ignore prop") m (List a)
+subsumedByProps g props prop = do
+  props
+    # List.foldM
+        ( \known_props prop' -> do
+            compareProp (prop ^. g) (prop' ^. g)
+              # runExceptT
+              # lift
+              # bindFlipped case _ of
+                  -- prop >< prop' ==> keep prop'
+                  Left _ -> pure (prop' : known_props)
+                  -- prop < prop' ==> prop is subsumed; keep prop'
+                  Right (LT /\ _) -> throwError (Exc { label: Proxy :: Proxy "ignore prop", source: "subsumedByProps", description: "given prop is subsumed by other props" })
+                  -- prop = prop' ==> prop is subsumed; keep prop'
+                  Right (EQ /\ _) -> throwError (Exc { label: Proxy :: Proxy "ignore prop", source: "subsumedByProps", description: "given prop is subsumed by other props" })
+                  -- prop > prop' ==> prop' is subsumed so drop prop'
+                  Right (GT /\ _) -> pure known_props
+        )
+        Nil
+
+insertProp ::
+  forall m a.
+  Monad m =>
+  MonadReader Ctx m =>
+  MonadThrow (Exc "error") m =>
+  MonadState Env m =>
+  MonadWriter (Array Log) m =>
+  Getter' a Prop -> List a -> a -> m (Either (Exc "ignore prop") (List a))
+insertProp g props prop =
+  runExceptT do
+    props' <- subsumedByProps g props prop
+    List.snoc props' prop # pure
 
 resolveProp ::
   forall m.
@@ -279,7 +306,7 @@ resolveProp ::
   MonadWriter (Array Log) m =>
   Prop -> m Unit
 resolveProp prop@(Prop prop_name _) = do
-  tell [ Log { label: "resolve prop", messages: [ prop # PropLogMessage "prop" ] } ]
+  tellLog { label: "resolve prop", messages: [ prop # PropLogMessage "prop" ] }
   Env env <- get
   -- rules that result from applying `prop` to a rule
   new_ripe_rules :: List RipeRule <-
@@ -291,10 +318,10 @@ resolveProp prop@(Prop prop_name _) = do
               (applyRipeRuleToProp ripe_rule prop # runExceptT)
                 >>= case _ of
                     Left err -> do
-                      tell [ Log { label: "resolve prop . apply rule . fail", messages: [ ripe_rule # RipeRuleLogMessage "ripe_rule", prop # PropLogMessage "prop", err # show # StringLogMessage ] } ]
+                      tellLog { label: "resolve prop . apply rule . failure", messages: [ prop # PropLogMessage "prop", ripe_rule # RipeRuleLogMessage "ripe rule", err # show # StringLogMessage ] }
                       pure Nil
                     Right rule' -> do
-                      tell [ Log { label: "resolve prop . apply rule . pass", messages: [ prop # PropLogMessage "prop", ripe_rule # RipeRuleLogMessage "rule", rule' # RuleLogMessage "rule after subst" ] } ]
+                      tellLog { label: "resolve prop . apply rule . success", messages: [ prop # PropLogMessage "prop", ripe_rule # RipeRuleLogMessage "rule", rule' # RuleLogMessage "rule after subst" ] }
                       case nextHypothesis rule' of
                         Left conclusion -> do
                           -- doesn't have any more hypotheses, so just defer its conclusion
@@ -304,19 +331,38 @@ resolveProp prop@(Prop prop_name _) = do
                           pure (List.singleton ripe_rule')
           )
       # map List.fold
-  -- modify_ (\(Env env') -> (Env env' { rules = new_ripe_rules <> env'.rules }))
   new_ripe_rules # traverse_ deferRipeRule
-  pure unit
 
 -- | Defers a `Prop` to be resolved later.
 deferProp ::
   forall m.
   MonadState Env m =>
   MonadWriter (Array Log) m =>
+  MonadReader Ctx m =>
+  MonadThrow (Exc "error") m =>
   Boolean -> Prop -> m Unit
-deferProp isNew prop = do
-  tell [ Log { label: "defer prop", messages: [ prop # PropLogMessage "prop", { isNew } # show # StringLogMessage ] } ]
-  modify_ \(Env env) -> Env env { active_props = List.snoc env.active_props { prop, isNew } }
+deferProp isNew prop@(Prop prop_name _) = do
+  tellLog { label: "defer prop", messages: [ prop # PropLogMessage "prop", { isNew } # show # StringLogMessage ] }
+  Env env <- get
+  -- TODO: could also check if subsumed by any known_prop
+  insertProp (Lens.Record.prop (Proxy :: Proxy "prop")) env.active_props { prop, isNew }
+    >>= case _ of
+        Left exc -> do
+          tellLog { label: "defer prop . failure", messages: [ prop # PropLogMessage "prop", exc # show # StringLogMessage ] }
+        Right active_props -> do
+          let
+            failure exc = do
+              tellLog { label: "defer prop . failure", messages: [ prop # PropLogMessage "prop", exc # show # StringLogMessage ] }
+
+            success = do
+              tellLog { label: "defer prop . success", messages: [ prop # PropLogMessage "prop" ] }
+              modify_ \(Env env') -> Env env' { active_props = active_props }
+          env.known_props # Map.lookup prop_name
+            # maybe success \known_props ->
+                subsumedByProps identity known_props prop # runExceptT
+                  # bindFlipped case _ of
+                      Left exc -> failure exc
+                      Right _ -> success
 
 -- | Defers a `Rule` by inserting it into `ripe_rules` and defering all known
 -- | `Prop`s that can be applied to this rule, to be resolved later.
@@ -328,13 +374,15 @@ deferRipeRule ::
   MonadWriter (Array Log) m =>
   RipeRule -> m Unit
 deferRipeRule ripe_rule@{ hypothesis: Hypothesis (Prop prop_name _) _ } = do
-  tell [ Log { label: "defer rule", messages: [ ripe_rule # RipeRuleLogMessage "rule" ] } ]
+  tellLog { label: "defer rule", messages: [ ripe_rule # RipeRuleLogMessage "rule" ] }
   modify_ \(Env env) -> Env env { ripe_rules = env.ripe_rules # Map.insertWith append prop_name (List.singleton ripe_rule) }
   Env env <- get
   props <-
     env.known_props
-      # List.filterM
-          ( \prop ->
+      # Map.lookup prop_name
+      # maybe
+          (pure Nil)
+          ( List.filterM \prop ->
               applyRipeRuleToProp ripe_rule prop
                 # runExceptT
                 # map (either (const false) (const true))
@@ -346,13 +394,15 @@ applyRipeRuleToProp ::
   MonadReader Ctx m =>
   MonadThrow (Exc "error") m =>
   MonadWriter (Array Log) m =>
+  MonadState Env m =>
   RipeRule -> Prop -> ExceptT (Exc "apply rule") m Rule
 applyRipeRuleToProp ripe_rule@{ hypothesis: Hypothesis hyp_prop hyp_sides } prop = do
-  tell [ Log { label: "applyRipeRuleToProp", messages: [ ripe_rule # RipeRuleLogMessage "ripe rule", prop # PropLogMessage "prop" ] } ]
+  tellLog { label: "applyRipeRuleToProp . attempt", messages: [ prop # PropLogMessage "prop", ripe_rule # RipeRuleLogMessage "ripe rule" ] }
   -- first, check if prop satisfies hypothesis_prop
   sigma <-
     compareProp hyp_prop prop
-      >>= case _ of
+      # mapExceptT (map (lmap (map_Exc_label _apply_rule)))
+      # bindFlipped case _ of
           LT /\ sigma -> pure sigma
           EQ /\ sigma -> pure sigma
           _ -> throwError (Exc { label: _apply_rule, source: "applyRipeRuleToProp", description: show hyp_prop <> " < " <> show prop })
@@ -360,9 +410,12 @@ applyRipeRuleToProp ripe_rule@{ hypothesis: Hypothesis hyp_prop hyp_sides } prop
     rule' = ripe_rule.rule' # substRule sigma
 
     hyp_sides' = hyp_sides <#> substSideHypothesis sigma
-  tell [ Log { label: "applyRipeRuleToProp", messages: [ rule' # RuleLogMessage "rule'" ] } ]
   -- second, check if the side hypotheses hold
-  processSideHypotheses rule' hyp_sides'
+  rule'' <-
+    processSideHypotheses rule' hyp_sides'
+      # mapExceptT (map (lmap (map_Exc_label _apply_rule)))
+  tellLog { label: "applyRipeRuleToProp . success", messages: [ prop # PropLogMessage "prop", ripe_rule # RipeRuleLogMessage "ripe rule", rule'' # RuleLogMessage "rule'" ] }
+  pure rule''
 
 processSideHypotheses ::
   forall m.
@@ -412,23 +465,37 @@ compareProp ::
   forall m.
   MonadReader Ctx m =>
   MonadThrow (Exc "error") m =>
+  MonadState Env m =>
   MonadWriter (Array Log) m =>
-  Prop -> Prop -> ExceptT (Exc "apply rule") m LatticeOrdering
-compareProp (Prop p1 t1) (Prop p2 t2) = do
-  unless (p1 == p2) (throwError (Exc { label: _apply_rule, source: "compareProp", description: show p1 <> " != " <> show p2 }))
-  Ctx { focusModule: Module { relations } } <- ask
-  domain <- case Map.lookup p1 relations of
-    Nothing -> throwError (Exc { label: _apply_rule, source: "compareProp", description: "could not find relation " <> show (show p1) })
-    Just (Relation { domain }) -> pure domain
-  compareTerm domain t1 t2
+  Prop -> Prop -> ExceptT (Exc "compare") m LatticeOrdering
+compareProp prop1@(Prop p1 t1) prop2@(Prop p2 t2) =
+  ( do
+      unless (p1 == p2) do
+        throwError (Exc { label: _compare, source: "compareProp", description: show p1 <> " != " <> show p2 })
+      Ctx { focusModule: Module { relations } } <- ask
+      domain <- case Map.lookup p1 relations of
+        Nothing -> throwError (Exc { label: _compare, source: "compareProp", description: "could not find relation " <> show (show p1) })
+        Just (Relation { domain }) -> pure domain
+      compareTerm domain t1 t2
+  )
+    # runExceptT
+    # bindFlipped case _ of
+        Left exc -> do
+          tellLog { label: "compareProp . failure", messages: [ prop1 # PropLogMessage "prop1", prop2 # PropLogMessage "prop2", exc # show # StringLogMessage ] }
+          pure (Left exc)
+        Right o -> do
+          tellLog { label: "compareProp . success", messages: [ prop1 # PropLogMessage "prop1", prop2 # PropLogMessage "prop2", o # fst # show # StringLogMessage ] }
+          pure (Right o)
+    # ExceptT
 
 -- | Assumes that terms to have the same type type.
+-- TODO: check for consistent substitution
 compareTerm ::
   forall m.
   MonadThrow (Exc "error") m =>
   MonadReader Ctx m =>
   MonadWriter (Array Log) m =>
-  LatticeType -> Term -> Term -> ExceptT (Exc "apply rule") m LatticeOrdering
+  LatticeType -> Term -> Term -> ExceptT (Exc "compare") m LatticeOrdering
 compareTerm _lty (VarTerm x1) (VarTerm x2) =
   EQ
     /\ ( Map.fromFoldable
@@ -445,16 +512,16 @@ compareTerm _lty (VarTerm x1) t2 = EQ /\ (Map.singleton x1 t2) # pure
 compareTerm lty@(NamedLatticeType x) t1 t2 = do
   Ctx { focusModule } <- ask
   case lookupModule (Proxy :: Proxy "latticeTypeDefs") x focusModule of
-    Nothing -> throwError (Exc { label: _apply_rule, source: "comapreTerm " <> show lty <> " " <> show t1 <> " " <> show t2, description: "could not find lattice type definition with name " <> show x })
+    Nothing -> throwError (Exc { label: _compare, source: "comapreTerm " <> show lty <> " " <> show t1 <> " " <> show t2, description: "could not find lattice type definition with name " <> show x })
     Just latticeTypeDef -> case latticeTypeDef of
       LatticeTypeDef lty -> compareTerm lty t1 t2
       ExternalLatticeTypeDef latticeTypeDef -> do
         Ctx { externalCompares } <- ask
         case Map.lookup latticeTypeDef.name externalCompares of
-          Nothing -> throwError (Exc { label: _apply_rule, source: "compareTerm " <> show lty <> " " <> show t1 <> " " <> show t2, description: "could not find compare function for external lattice type " <> show latticeTypeDef.name })
+          Nothing -> throwError (Exc { label: _compare, source: "compareTerm " <> show lty <> " " <> show t1 <> " " <> show t2, description: "could not find compare function for external lattice type " <> show latticeTypeDef.name })
           Just compare -> case t1 /\ t2 of
             LiteralTerm s1 _ /\ LiteralTerm s2 _ -> case compare s1 s2 of
-              Left description -> throwError (Exc { label: _apply_rule, source: "compareTerm " <> show lty <> " " <> show t1 <> " " <> show t2, description })
+              Left description -> throwError (Exc { label: _compare, source: "compareTerm " <> show lty <> " " <> show t1 <> " " <> show t2, description })
               Right o -> o /\ Map.empty # pure
             _ -> lift $ throwError (Exc { label: _error, source: "compareTerm " <> show lty <> " " <> show t1 <> " " <> show t2, description: "terms of an external lattice type are not literals" })
 
@@ -492,7 +559,6 @@ compareTerm lty@(SumLatticeType LeftEqualRight_SumLatticeTypeOrdering lty_left l
 
 compareTerm lty@(ProductLatticeType FirstThenSecond_ProductLatticeTypeOrdering lty_1 lty_2) t1 t2 = case t1 /\ t2 of
   PairTerm t1_1 t1_2 /\ PairTerm t2_1 t2_2 -> do
-    -- Debug.traceM $ "compareTerm " <> show lty_1 <> " " <> show t1_1 <> " " <> show t2_1
     compareTerm lty_1 t1_1 t2_1
       >>= case _ of
           LT /\ sigma -> LT /\ sigma # pure
@@ -521,11 +587,11 @@ compareTerm (DiscreteLatticeType lty) t1 t2 =
 
 compareTerm (PowerLatticeType lty) t1 t2 = Unsafe.todo "compareTerm PowerLatticeType"
 
-throwError_compareTerm :: forall m a. MonadThrow (Exc "apply rule") m => LatticeType -> Term -> Term -> m a
+throwError_compareTerm :: forall m a. MonadThrow (Exc "compare") m => LatticeType -> Term -> Term -> m a
 throwError_compareTerm lty t1 t2 =
   throwError
     ( Exc
-        { label: _apply_rule
+        { label: _compare
         , source: "compareTerm"
         , description: "in lattice " <> show lty <> ", " <> show t1 <> " !<= " <> show t2
         }

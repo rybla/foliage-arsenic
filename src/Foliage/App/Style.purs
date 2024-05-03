@@ -24,6 +24,8 @@ padding_horizontal_big = [ "padding: 0 1.0em" ]
 
 padding_small = [ "padding: 0.5em" ]
 
+margin_small = [ "margin: 0.5em" ]
+
 shadowed = [ "box-shadow: 0 0 0.2em 0.1em black" ]
 
 font_code = [ "font-family: monospace" ]

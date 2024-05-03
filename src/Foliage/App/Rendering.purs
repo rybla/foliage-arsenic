@@ -7,6 +7,7 @@ import Data.Array as Array
 import Data.FunctorWithIndex (mapWithIndex)
 import Data.List as List
 import Data.Map as Map
+import Data.Maybe (Maybe(..), maybe)
 import Data.Newtype (unwrap)
 import Foliage.App.Style as Style
 import Halogen.HTML (PlainHTML)
@@ -34,10 +35,11 @@ divs :: _ -> Array Htmls -> Html
 divs props = HH.div props <<< Array.concat
 
 instance _Render_Program :: Render Program where
-  render (Program program) =
+  render (Program prog) =
     [ divs [ Style.style $ Style.flex_column <> [ "gap: 1.0em" ] ]
-        $ [ line (Punc "program" ⊕ program.name ⊕ [])
-          , program.modules
+        $ [ line (Punc "program" ⊕ prog.name ⊕ [])
+          , prog.doc # maybe [] doc_block
+          , prog.modules
               # map render
               # Map.values
               # Array.fromFoldable
@@ -45,16 +47,23 @@ instance _Render_Program :: Render Program where
           ]
     ]
 
+doc_block :: String -> Htmls
+doc_block s =
+  [ HH.div [ Style.style $ Style.padding_small <> Style.font_prose <> [ "max-width: 30em", "background-color: rgba(0, 0, 0, 0.1)" ] ]
+      [ HH.text s ]
+  ]
+
 instance _Render_Module :: Render Module where
   render (Module mod) =
     definition
+      (mod.doc <#> doc_block)
       ("module" # Punc # render)
       (mod.name # render)
       ( let
           renderModDefinition :: forall a. Htmls -> (a -> Htmls) -> _ a -> Htmls
           renderModDefinition label renderBody items =
             items
-              # mapWithIndex (\name body -> definition label (render name) (renderBody body))
+              # mapWithIndex (\name body -> definition Nothing label (render name) (renderBody body))
               # Map.values
               # Array.fromFoldable
               # Array.concat
@@ -79,10 +88,11 @@ instance _Render_Module :: Render Module where
             ]
       )
 
-definition :: Htmls -> Htmls -> Htmls -> Htmls
-definition sort name body =
+definition :: Maybe Htmls -> Htmls -> Htmls -> Htmls -> Htmls
+definition mb_doc sort name body =
   [ divs [ Style.style $ Style.flex_column <> Style.padding_small <> Style.boundaries ]
-      [ line (sort ⊕ name ⊕ Punc "=" ⊕ [])
+      [ mb_doc # maybe [] (HH.div [] >>> pure)
+      , line (sort ⊕ name ⊕ Punc "=" ⊕ [])
       , section body
       ]
   ]
@@ -137,7 +147,7 @@ instance _Render_DataType :: Render DataType where
     ProductDataType f s -> Punc "(" ⊕ f ⊕ Punc "*" ⊕ s ⊕ Punc ")" ⊕ []
 
 line :: Htmls -> Htmls
-line = HH.div [ Style.style $ Style.flex_row <> [ "display: inline-flex", "white-space: flex-wrap" ] ] >>> pure
+line = HH.div [ Style.style $ Style.flex_row <> [ "gap: 0.8em", "display: inline-flex", "white-space: flex-wrap" ] ] >>> pure
 
 -- | Puntuation
 newtype Punc

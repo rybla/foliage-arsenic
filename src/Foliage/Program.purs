@@ -25,6 +25,7 @@ import Record as Record
 data Program
   = Program
     { name :: Name
+    , doc :: Maybe String
     , modules :: Map Name Module
     }
 
@@ -47,6 +48,7 @@ lookupModule label k = (\(Module mod) -> mod) >>> Record.get label >>> Map.looku
 data Module
   = Module
     { name :: Name
+    , doc :: Maybe String
     , dataTypeDefs :: Map Name DataTypeDef
     , latticeTypeDefs :: Map Name LatticeTypeDef
     , functionDefs :: Map Name FunctionDef
@@ -389,13 +391,14 @@ type TermSubst
 
 substRule :: TermSubst -> Rule -> Rule
 substRule sigma (Rule rule) =
-  Debug.trace ("substRule.sigma: " <> show sigma) \_ ->
+  {- Debug.trace ("substRule.sigma: " <> show sigma) \_ ->
     Debug.trace ("substRule.before: " <> show (Rule rule)) \_ ->
       Debug.spyWith "substRule.after: " show
-        $ Rule
-            { hypotheses: rule.hypotheses <#> substHypothesis sigma
-            , conclusion: rule.conclusion # substProp sigma
-            }
+        $ -}
+  Rule
+    { hypotheses: rule.hypotheses <#> substHypothesis sigma
+    , conclusion: rule.conclusion # substProp sigma
+    }
 
 substProp :: TermSubst -> Prop -> Prop
 substProp sigma (Prop p t) = Prop p (substTerm sigma t)

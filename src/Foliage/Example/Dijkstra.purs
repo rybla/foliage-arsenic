@@ -10,7 +10,9 @@ import Data.Lazy as Lazy
 import Data.List (List(..), (:))
 import Data.List as List
 import Data.Map as Map
+import Data.Maybe (Maybe(..), maybe)
 import Data.Newtype (wrap)
+import Data.String as String
 import Data.Tuple (Tuple(..))
 import Data.Tuple.Nested ((/\))
 
@@ -36,10 +38,17 @@ dijkstra =
     in
       Program
         { name: Name "Dijstra"
+        , doc:
+            """
+This program implements Dijstra's algorithm for computing the shortest path in a graph from a starting node to any other node in the graph.
+          """
+              # String.trim
+              # Just
         , modules:
             Map.singleton mainModuleName
               ( Module
                   { name: mainModuleName
+                  , doc: Nothing
                   , dataTypeDefs:
                       Map.fromFoldable
                         [ name.int /\ ExternalDataTypeDef "Int"
@@ -50,7 +59,7 @@ dijkstra =
                       Map.fromFoldable
                         [ name.int /\ ExternalLatticeTypeDef { name: "Int", compare: "compareInt" }
                         , name.node /\ LatticeTypeDef (DiscreteLatticeType (NamedLatticeType name.int))
-                        , name.weight /\ LatticeTypeDef (NamedLatticeType name.int)
+                        , name.weight /\ LatticeTypeDef (OppositeLatticeType (NamedLatticeType name.int))
                         ]
                   , functionDefs:
                       Map.fromFoldable
@@ -68,7 +77,7 @@ dijkstra =
                         ]
                   , rules:
                       Map.fromFoldable
-                        ( [ [ Tuple name.edge_distance
+                        ( [ [ {-Tuple name.edge_distance
                                 let
                                   { n1, n2, w } = { n1: wrap "n1", n2: wrap "n2", w: wrap "w" }
                                 in
@@ -78,7 +87,7 @@ dijkstra =
                                           : Nil
                                     , conclusion: Prop name.dist ((VarTerm n1 `PairTerm` VarTerm n2) `PairTerm` VarTerm w)
                                     }
-                            , Tuple name.append_edge_distance
+                            , -} Tuple name.append_edge_distance
                                 let
                                   { n1, n2, n3, w1, w2, w3 } = { n1: wrap "n1", n2: wrap "n2", n3: wrap "n3", w1: wrap "w1", w2: wrap "w2", w3: wrap "w3" }
                                 in
@@ -102,10 +111,18 @@ dijkstra =
 
 -- | Directed Graph
 data Graph
-  = Graph (Array ((Int /\ Int) /\ Int))
+  = Graph Int (Array ((Int /\ Int) /\ Int))
 
 compileGraph :: Graph -> Array (Name /\ Rule)
-compileGraph (Graph es) = es <#> f
+compileGraph (Graph n es) =
+  Array.cons
+    ( Name (show n <> " <==> " <> show n)
+        /\ Rule
+            { hypotheses: Nil
+            , conclusion: Prop name.dist ((LiteralTerm (show n) (NamedDataType name.int) `PairTerm` LiteralTerm (show n) (NamedDataType name.int)) `PairTerm` LiteralTerm (show 0) (NamedDataType name.int))
+            }
+    )
+    (es <#> f)
   where
   f ((n1 /\ n2) /\ w) =
     (wrap (show n1 <> " -> " <> show n2))
@@ -114,4 +131,13 @@ compileGraph (Graph es) = es <#> f
           , conclusion: Prop name.edge ((LiteralTerm (show n1) (NamedDataType name.int) `PairTerm` LiteralTerm (show n2) (NamedDataType name.int)) `PairTerm` LiteralTerm (show w) (NamedDataType name.int))
           }
 
-graph1 = Graph (Array.range 0 1 <#> \i -> (i /\ (i + 1)) /\ 10)
+graph1 :: Graph
+graph1 =
+  -- should try 0 --> 1 first, but then find that 0 --> 2 --> 3 is faster route to 3
+  Graph
+    0
+    [ (0 /\ 1) /\ 10
+    , (1 /\ 3) /\ 40
+    , (0 /\ 2) /\ 20
+    , (2 /\ 3) /\ 10
+    ]

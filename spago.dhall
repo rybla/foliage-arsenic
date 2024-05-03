@@ -22,6 +22,7 @@
   , "ordered-collections"
   , "partial"
   , "prelude"
+  , "profunctor-lenses"
   , "record"
   , "refs"
   , "spec"

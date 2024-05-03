@@ -16,6 +16,7 @@ import Effect.Aff (Aff)
 import Effect.Class.Console as Console
 import Foliage.App.Console.Component (Query(..))
 import Foliage.App.Console.Component as Console.Component
+import Foliage.App.Console.Component as Coonsole.Component
 import Foliage.App.Editor.Component as Editor.Component
 import Foliage.App.Style as Style
 import Foliage.App.Viewer.Component as Viewer.Component
@@ -31,6 +32,7 @@ import Unsafe as Unsafe
 data Action
   = EditorOutput Editor.Component.Output
   | ViewerOutput Viewer.Component.Output
+  | ConsoleOutput Console.Component.Output
 
 component :: forall query input output. Component query input output Aff
 component = mkComponent { initialState, eval, render }
@@ -61,11 +63,18 @@ component = mkComponent { initialState, eval, render }
           >>= case _ of
               Left err -> do
                 Debug.traceM (show err)
-                H.tell _viewer unit (Viewer.Component.SetResult (Just (Viewer.Component.ErrResult { err, props: mempty })))
-              Right (mb_err /\ Env env) -> do
+                H.tell _viewer unit (Viewer.Component.SetResult (Just (Viewer.Component.ErrResult { err, env: Nothing })))
+              Right (mb_err /\ env) -> do
                 case mb_err of
-                  Nothing -> H.tell _viewer unit (Viewer.Component.SetResult (Just (Viewer.Component.OkResult { props: env.known_props # Array.fromFoldable })))
-                  Just err -> H.tell _viewer unit (Viewer.Component.SetResult (Just (Viewer.Component.ErrResult { err, props: env.known_props # Array.fromFoldable })))
+                  Nothing -> H.tell _viewer unit (Viewer.Component.SetResult (Just (Viewer.Component.OkResult { env })))
+                  Just err -> H.tell _viewer unit (Viewer.Component.SetResult (Just (Viewer.Component.ErrResult { err, env: Just env })))
+        pure unit
+    ConsoleOutput output -> case output of
+      Console.Component.ShowIntermediateEnv env -> do
+        H.tell _viewer unit (Viewer.Component.SetIntermediateEnv (Just env))
+        pure unit
+      Console.Component.HideIntermediateEnv -> do
+        H.tell _viewer unit (Viewer.Component.SetIntermediateEnv Nothing)
         pure unit
 
   render state =
@@ -77,11 +86,13 @@ component = mkComponent { initialState, eval, render }
                   [ HH.div [ Style.style $ Style.padding_small ]
                       [ HH.slot _editor unit Editor.Component.component { program: Just (Example.dijkstra # Lazy.force) } EditorOutput ]
                   ]
-              , HH.div [ Style.style $ [ "height: 100%", "width: 50%" ] <> Style.flex_column ]
-                  [ HH.div [ Style.style $ [ "flex-grow: 1", "flex-shrink: 1", "min-height: 10em", "overflow: scroll" ] <> Style.padding_small ]
+              , HH.div [ Style.style $ [ "height: 100%", "width: 50%", "overflow: scroll" ] <> Style.flex_column ]
+                  [ HH.div [ Style.style $ Style.padding_small ]
                       [ HH.slot _viewer unit Viewer.Component.component {} ViewerOutput ]
-                  , HH.div [ Style.style $ [ "flex-grow: 1", "flex-shrink: 1", "min-height: 10em", "overflow: scroll" ] <> Style.padding_small ]
-                      [ HH.slot _console unit Console.Component.component {} absurd ]
+                  ]
+              , HH.div [ Style.style $ [ "height: 100%", "width: 50%", "overflow: scroll" ] <> Style.flex_column ]
+                  [ HH.div [ Style.style $ Style.padding_small ]
+                      [ HH.slot _console unit Console.Component.component {} ConsoleOutput ]
                   ]
               ]
           ]
