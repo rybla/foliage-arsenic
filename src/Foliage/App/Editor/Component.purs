@@ -44,10 +44,10 @@ type State
     }
 
 data Action
-  = Save
-  | Load
-  | ChangeProgramInput Event
-  | SetProgram Program
+  -- | Save
+  -- | Load
+  -- | ChangeProgramInput Event
+  = SetProgram Program
 
 component :: Component Query Input Output Aff
 component = mkComponent { initialState, eval, render }
@@ -92,25 +92,25 @@ component = mkComponent { initialState, eval, render }
       pure (Just (k program))
 
   handleAction = case _ of
-    Save -> do
-      Console.log "[Editor.Save]"
-      { program: program@(Program { name }) } <- get
-      saveJson { json: encodeJson program, filename: unwrap name <> ".json" } # liftEffect
-    Load -> do
-      Console.log "[Editor.Load]"
-      e <- H.getHTMLElementRef program_input_ref # map (Unsafe.fromJust "program_input_ref should exist")
-      e # HTMLElement.click # liftEffect
-    ChangeProgramInput event -> do
-      Console.log "[Editor.ChangeProgramInput]"
-      getJsonFromChangeInputFile { event } # liftAff
-        >>= case _ of
-            Nothing -> pure unit
-            Just json -> case decodeJson json :: _ Program of
-              Left err -> do
-                modify_ _ { load_error = printJsonDecodeError err # Just }
-              Right program -> do
-                modify_ _ { load_error = Nothing }
-                set_program program
+    -- Save -> do
+    --   Console.log "[Editor.Save]"
+    --   { program: program@(Program { name }) } <- get
+    --   saveJson { json: encodeJson program, filename: unwrap name <> ".json" } # liftEffect
+    -- Load -> do
+    --   Console.log "[Editor.Load]"
+    --   e <- H.getHTMLElementRef program_input_ref # map (Unsafe.fromJust "program_input_ref should exist")
+    --   e # HTMLElement.click # liftEffect
+    -- ChangeProgramInput event -> do
+    --   Console.log "[Editor.ChangeProgramInput]"
+    --   getJsonFromChangeInputFile { event } # liftAff
+    --     >>= case _ of
+    --         Nothing -> pure unit
+    --         Just json -> case decodeJson json :: _ Program of
+    --           Left err -> do
+    --             modify_ _ { load_error = printJsonDecodeError err # Just }
+    --           Right program -> do
+    --             modify_ _ { load_error = Nothing }
+    --             set_program program
     SetProgram program -> do
       Console.log "[Editor.SetProgram]"
       set_program program
@@ -131,13 +131,13 @@ component = mkComponent { initialState, eval, render }
                 in
                   -- [ button (const Save) "Save"
                   -- , button (const Load) "Load"
-                  [ HH.input
+                  [ {-HH.input
                       [ HP.ref program_input_ref
                       , HP.type_ HP.InputFile
                       , HE.onChange ChangeProgramInput
                       , Style.style [ "display: none" ]
                       ]
-                  , HH.slot (Proxy :: Proxy "dropdown") "examples" DropdownMenu.component
+                  , -} HH.slot (Proxy :: Proxy "dropdown") "examples" DropdownMenu.component
                       { title:
                           HH.div [ Style.style $ Style.button ]
                             [ HH.text "Examples" ]

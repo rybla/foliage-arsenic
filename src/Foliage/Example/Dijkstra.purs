@@ -5,6 +5,7 @@ import Foliage.Program
 import Prelude
 import Data.Array as Array
 import Data.Homogeneous.Record (fromHomogeneous, homogeneous)
+import Data.Int as Int
 import Data.Lazy (Lazy)
 import Data.Lazy as Lazy
 import Data.List (List(..), (:))
@@ -29,6 +30,16 @@ name =
     # homogeneous
     # map Name
     # fromHomogeneous
+
+function =
+  { addWeight:
+      wrap \args -> do
+        w1 <- args # getValidatedArg { f: "addWeight", x: "w1", dt: NamedDataType name.int, dt_name: "Int", fromString: Int.fromString }
+        w2 <- args # getValidatedArg { f: "addWeight", x: "w2", dt: NamedDataType name.int, dt_name: "Int", fromString: Int.fromString }
+        let
+          w3 = w1 + w2
+        pure (LiteralTerm (Int.toStringAs Int.decimal w3) (NamedDataType name.int))
+  }
 
 dijkstra :: Lazy Program
 dijkstra =
@@ -68,6 +79,7 @@ This program implements Dijstra's algorithm for computing the shortest path in a
                                 { name: "addWeight"
                                 , inputs: [ "w1" /\ NamedDataType name.weight, "w2" /\ NamedDataType name.weight ]
                                 , output: NamedDataType name.weight
+                                , impl: function.addWeight
                                 }
                         ]
                   , relations:
@@ -96,7 +108,12 @@ This program implements Dijstra's algorithm for computing the shortest path in a
                                         List.fromFoldable
                                           [ Hypothesis (Prop name.dist ((VarTerm n1 `PairTerm` VarTerm n2) `PairTerm` VarTerm w1)) []
                                           , Hypothesis (Prop name.edge ((VarTerm n2 `PairTerm` VarTerm n3) `PairTerm` VarTerm w2))
-                                              [ FunctionSideHypothesis { resultVarName: w3, functionName: name.addWeight, args: [ VarTerm w1, VarTerm w2 ] } ]
+                                              [ FunctionSideHypothesis
+                                                  { resultVarName: w3
+                                                  , functionName: name.addWeight
+                                                  , args: [ VarTerm w1, VarTerm w2 ]
+                                                  }
+                                              ]
                                           ]
                                     , conclusion: Prop name.dist ((VarTerm n1 `PairTerm` VarTerm n3) `PairTerm` VarTerm w3)
                                     }

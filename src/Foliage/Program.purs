@@ -1,9 +1,8 @@
 module Foliage.Program where
 
 import Prelude
-import Data.Argonaut (class DecodeJson, class EncodeJson)
-import Data.Argonaut.Decode.Generic (genericDecodeJson)
-import Data.Argonaut.Encode.Generic (genericEncodeJson)
+import Control.Bind (bindFlipped)
+import Control.Monad.Error.Class (throwError)
 import Data.Either (Either(..))
 import Data.Eq.Generic (genericEq)
 import Data.Foldable (class Foldable, null)
@@ -11,12 +10,11 @@ import Data.Generic.Rep (class Generic)
 import Data.List (List(..), (:))
 import Data.Map (Map)
 import Data.Map as Map
-import Data.Maybe (Maybe(..), fromMaybe)
+import Data.Maybe (Maybe(..), fromMaybe, maybe)
 import Data.Newtype (class Newtype, wrap)
 import Data.Show.Generic (genericShow)
 import Data.Traversable (class Traversable)
 import Data.Tuple.Nested (type (/\))
-import Debug as Debug
 import Effect.Ref (Ref)
 import Effect.Ref as Ref
 import Effect.Unsafe (unsafePerformEffect)
@@ -36,12 +34,6 @@ instance _Eq_Program :: Eq Program where
 
 instance _Show_Program :: Show Program where
   show x = genericShow x
-
-instance _DecodeJson_Program :: DecodeJson Program where
-  decodeJson x = genericDecodeJson x
-
-instance _EncodeJson_Program :: EncodeJson Program where
-  encodeJson x = genericEncodeJson x
 
 lookupModule label k = (\(Module mod) -> mod) >>> Record.get label >>> Map.lookup k
 
@@ -64,12 +56,6 @@ instance _Eq_Module :: Eq Module where
 instance _Show_Module :: Show Module where
   show x = genericShow x
 
-instance _DecodeJson_Module :: DecodeJson Module where
-  decodeJson x = genericDecodeJson x
-
-instance _EncodeJson_Module :: EncodeJson Module where
-  encodeJson x = genericEncodeJson x
-
 data DataTypeDef
   = ExternalDataTypeDef String
   | DataTypeDef DataType
@@ -81,12 +67,6 @@ instance _Eq_DataTypeDef :: Eq DataTypeDef where
 
 instance _Show_DataTypeDef :: Show DataTypeDef where
   show x = genericShow x
-
-instance _DecodeJson_DataTypeDef :: DecodeJson DataTypeDef where
-  decodeJson x = genericDecodeJson x
-
-instance _EncodeJson_DataTypeDef :: EncodeJson DataTypeDef where
-  encodeJson x = genericEncodeJson x
 
 data DataType
   = UnitDataType
@@ -103,12 +83,6 @@ instance _Eq_DataType :: Eq DataType where
 instance _Show_DataType :: Show DataType where
   show x = genericShow x
 
-instance _DecodeJson_DataType :: DecodeJson DataType where
-  decodeJson x = genericDecodeJson x
-
-instance _EncodeJson_DataType :: EncodeJson DataType where
-  encodeJson x = genericEncodeJson x
-
 data LatticeTypeDef
   = LatticeTypeDef LatticeType
   | ExternalLatticeTypeDef { name :: String, compare :: String }
@@ -120,12 +94,6 @@ instance _Eq_LatticeTypeDef :: Eq LatticeTypeDef where
 
 instance _Show_LatticeTypeDef :: Show LatticeTypeDef where
   show x = genericShow x
-
-instance _DecodeJson_LatticeTypeDef :: DecodeJson LatticeTypeDef where
-  decodeJson x = genericDecodeJson x
-
-instance _EncodeJson_LatticeTypeDef :: EncodeJson LatticeTypeDef where
-  encodeJson x = genericEncodeJson x
 
 data LatticeType
   = NamedLatticeType Name
@@ -145,12 +113,6 @@ instance _Eq_LatticeType :: Eq LatticeType where
 instance _Show_LatticeType :: Show LatticeType where
   show x = genericShow x
 
-instance _DecodeJson_LatticeType :: DecodeJson LatticeType where
-  decodeJson x = genericDecodeJson x
-
-instance _EncodeJson_LatticeType :: EncodeJson LatticeType where
-  encodeJson x = genericEncodeJson x
-
 data SumLatticeTypeOrdering
   = LeftGreaterThanRight_SumLatticeTypeOrdering
   | LeftLessThanRight_SumLatticeTypeOrdering
@@ -165,12 +127,6 @@ instance _Eq_SumLatticeTypeOrdering :: Eq SumLatticeTypeOrdering where
 instance _Show_SumLatticeTypeOrdering :: Show SumLatticeTypeOrdering where
   show x = genericShow x
 
-instance _DecodeJson_SumLatticeTypeOrdering :: DecodeJson SumLatticeTypeOrdering where
-  decodeJson x = genericDecodeJson x
-
-instance _EncodeJson_SumLatticeTypeOrdering :: EncodeJson SumLatticeTypeOrdering where
-  encodeJson x = genericEncodeJson x
-
 data ProductLatticeTypeOrdering
   = FirstThenSecond_ProductLatticeTypeOrdering
 
@@ -181,12 +137,6 @@ instance _Eq_ProductLatticeTypeOrdering :: Eq ProductLatticeTypeOrdering where
 
 instance _Show_ProductLatticeTypeOrdering :: Show ProductLatticeTypeOrdering where
   show x = genericShow x
-
-instance _DecodeJson_ProductLatticeTypeOrdering :: DecodeJson ProductLatticeTypeOrdering where
-  decodeJson x = genericDecodeJson x
-
-instance _EncodeJson_ProductLatticeTypeOrdering :: EncodeJson ProductLatticeTypeOrdering where
-  encodeJson x = genericEncodeJson x
 
 data SetOrdering
   = SetOrdering
@@ -199,17 +149,12 @@ instance _Eq_SetOrdering :: Eq SetOrdering where
 instance _Show_SetOrdering :: Show SetOrdering where
   show x = genericShow x
 
-instance _DecodeJson_SetOrdering :: DecodeJson SetOrdering where
-  decodeJson x = genericDecodeJson x
-
-instance _EncodeJson_SetOrdering :: EncodeJson SetOrdering where
-  encodeJson x = genericEncodeJson x
-
 data FunctionDef
   = ExternalFunctionDef
     { name :: String
     , inputs :: Array (String /\ DataType)
     , output :: DataType
+    , impl :: OpaqueFunction (Map String Term) (Either String Term)
     }
 
 derive instance _Generic_FunctionDef :: Generic FunctionDef _
@@ -219,12 +164,6 @@ instance _Eq_FunctionDef :: Eq FunctionDef where
 
 instance _Show_FunctionDef :: Show FunctionDef where
   show x = genericShow x
-
-instance _DecodeJson_FunctionDef :: DecodeJson FunctionDef where
-  decodeJson x = genericDecodeJson x
-
-instance _EncodeJson_FunctionDef :: EncodeJson FunctionDef where
-  encodeJson x = genericEncodeJson x
 
 data Relation
   = Relation
@@ -239,12 +178,6 @@ instance _Eq_Relation :: Eq Relation where
 instance _Show_Relation :: Show Relation where
   show x = genericShow x
 
-instance _DecodeJson_Relation :: DecodeJson Relation where
-  decodeJson x = genericDecodeJson x
-
-instance _EncodeJson_Relation :: EncodeJson Relation where
-  encodeJson x = genericEncodeJson x
-
 data Rule
   = Rule
     { hypotheses :: List Hypothesis
@@ -258,12 +191,6 @@ instance _Eq_Rule :: Eq Rule where
 
 instance _Show_Rule :: Show Rule where
   show x = genericShow x
-
-instance _DecodeJson_Rule :: DecodeJson Rule where
-  decodeJson x = genericDecodeJson x
-
-instance _EncodeJson_Rule :: EncodeJson Rule where
-  encodeJson x = genericEncodeJson x
 
 type RipeRule
   = { hypothesis :: Hypothesis, rule' :: Rule }
@@ -294,18 +221,16 @@ instance _Eq_Hypothesis :: Eq Hypothesis where
 instance _Show_Hypothesis :: Show Hypothesis where
   show x = genericShow x
 
-instance _DecodeJson_Hypothesis :: DecodeJson Hypothesis where
-  decodeJson x = genericDecodeJson x
-
-instance _EncodeJson_Hypothesis :: EncodeJson Hypothesis where
-  encodeJson x = genericEncodeJson x
-
 substHypothesis :: TermSubst -> Hypothesis -> Hypothesis
 substHypothesis sigma = case _ of
   Hypothesis prop sides -> Hypothesis (prop # substProp sigma) (sides <#> substSideHypothesis sigma)
 
 data SideHypothesis
-  = FunctionSideHypothesis { resultVarName :: Name, functionName :: Name, args :: Array Term }
+  = FunctionSideHypothesis
+    { resultVarName :: Name
+    , functionName :: Name
+    , args :: Array Term
+    }
 
 derive instance _Generic_SideHypothesis :: Generic SideHypothesis _
 
@@ -314,12 +239,6 @@ instance _Eq_SideHypothesis :: Eq SideHypothesis where
 
 instance _Show_SideHypothesis :: Show SideHypothesis where
   show x = genericShow x
-
-instance _DecodeJson_SideHypothesis :: DecodeJson SideHypothesis where
-  decodeJson x = genericDecodeJson x
-
-instance _EncodeJson_SideHypothesis :: EncodeJson SideHypothesis where
-  encodeJson x = genericEncodeJson x
 
 substSideHypothesis :: TermSubst -> SideHypothesis -> SideHypothesis
 substSideHypothesis sigma = case _ of
@@ -348,12 +267,6 @@ instance _Eq_PropF :: Eq x => Eq (PropF x) where
 instance _Show_PropF :: Show x => Show (PropF x) where
   show x = genericShow x
 
-instance _DecodeJson_PropF :: DecodeJson x => DecodeJson (PropF x) where
-  decodeJson x = genericDecodeJson x
-
-instance _EncodeJson_PropF :: EncodeJson x => EncodeJson (PropF x) where
-  encodeJson x = genericEncodeJson x
-
 type Term
   = TermF Name
 
@@ -379,12 +292,6 @@ instance _Eq_Term :: Eq x => Eq (TermF x) where
 
 instance _Show_Term :: Show x => Show (TermF x) where
   show x = genericShow x
-
-instance _DecodeJson_TermF :: DecodeJson x => DecodeJson (TermF x) where
-  decodeJson x = genericDecodeJson x
-
-instance _EncodeJson_TermF :: EncodeJson x => EncodeJson (TermF x) where
-  encodeJson x = genericEncodeJson x
 
 type TermSubst
   = Map Name Term
@@ -450,9 +357,38 @@ derive newtype instance _Ord_Name :: Ord Name
 
 derive newtype instance _Show_Name :: Show Name
 
-derive newtype instance _EncodeJson_Name :: EncodeJson Name
-
-derive newtype instance _DecodeJson_Name :: DecodeJson Name
-
 mainModuleName :: Name
 mainModuleName = Name "Main"
+
+newtype OpaqueFunction a b
+  = OpaqueFunction (a -> b)
+
+derive instance _Newtype_OpaqueFunction :: Newtype (OpaqueFunction a b) _
+
+instance _Eq_OpaqueFunction :: Eq (OpaqueFunction a b) where
+  eq _ _ = false
+
+instance _Show_OpaqueFunction :: Show (OpaqueFunction a b) where
+  show _ = "<function>"
+
+--  Utilities for defining external functions
+getValidatedArg ::
+  forall r a.
+  { dt :: DataType
+  , dt_name :: String
+  , f :: String
+  , fromString :: String -> Maybe a
+  , x :: String
+  | r
+  } ->
+  Map String Term -> Either String a
+getValidatedArg { f, x, dt, dt_name, fromString } args =
+  Map.lookup x args
+    # maybe (throwExternalFunctionCallError f $ "no arg for " <> show x) pure
+    # bindFlipped case _ of
+        LiteralTerm s dt'
+          | dt == dt' -> s # fromString # maybe (throwExternalFunctionCallError f $ s <> " is not a " <> dt_name) pure
+        t -> throwExternalFunctionCallError f $ "expected arg " <> x <> " = " <> show t <> " to be a " <> dt_name
+
+throwExternalFunctionCallError :: forall a. String -> String -> Either String a
+throwExternalFunctionCallError f msg = throwError $ "when calling external function " <> f <> ", " <> msg

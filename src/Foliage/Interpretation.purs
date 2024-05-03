@@ -7,6 +7,7 @@ module Foliage.Interpretation
 
 import Foliage.Program
 import Prelude
+
 import Control.Bind (bindFlipped)
 import Control.Monad.Error.Class (class MonadThrow)
 import Control.Monad.Except (ExceptT(..), mapExceptT, runExceptT, throwError)
@@ -27,7 +28,7 @@ import Data.List as List
 import Data.Map (Map)
 import Data.Map as Map
 import Data.Maybe (Maybe(..), fromMaybe, maybe)
-import Data.Newtype (class Newtype, over)
+import Data.Newtype (class Newtype, over, unwrap)
 import Data.Show.Generic (genericShow)
 import Data.Symbol (class IsSymbol, reflectSymbol)
 import Data.Traversable (traverse, traverse_)
@@ -53,8 +54,6 @@ newtype Ctx
   = Ctx
   { modules :: Map Name Module
   , focusModule :: Module
-  -- external function name => external function
-  , externalFunctions :: Map String (Map String Term -> Either String Term)
   -- external lattice type name => comparison function over that lattice type
   , externalCompares :: Map String (String -> String -> Either String Ordering)
   }
@@ -134,7 +133,6 @@ interpProgram (Program prog) = do
       Ctx
         { modules: prog.modules
         , focusModule
-        , externalFunctions
         , externalCompares
         }
 
@@ -433,19 +431,19 @@ processSideHypothesis ::
   Rule -> SideHypothesis -> ExceptT (Exc "apply rule") m Rule
 processSideHypothesis rule = case _ of
   FunctionSideHypothesis side -> do
-    Ctx { focusModule, externalFunctions } <- ask
+    Ctx { focusModule } <- ask
     functionDef <-
       focusModule
         # lookupModule (Proxy :: Proxy "functionDefs") side.functionName
         # maybe (lift $ throwError (Exc { label: _error, source: "processSideHypothesis", description: "could not function definition of the name " <> show side.functionName })) pure
     result <- case functionDef of
       ExternalFunctionDef externalFunctionDef -> do
-        function <- case Map.lookup externalFunctionDef.name externalFunctions of
-          Nothing -> lift $ throwError (Exc { label: _error, source: "processSideHypothesis", description: "cound not find function of the name " <> show externalFunctionDef.name })
-          Just function -> pure function
+        -- function <- case Map.lookup externalFunctionDef.name externalFunctions of
+        --   Nothing -> lift $ throwError (Exc { label: _error, source: "processSideHypothesis", description: "cound not find function of the name " <> show externalFunctionDef.name })
+        --   Just function -> pure function
         args <- side.args # traverse (evaluateTerm >>> lift)
         result <-
-          function (Array.zip externalFunctionDef.inputs args # map (lmap fst) # Map.fromFoldable)
+          unwrap externalFunctionDef.impl (Array.zip externalFunctionDef.inputs args # map (lmap fst) # Map.fromFoldable)
             # either (\err -> lift $ throwError (Exc { label: _error, source: "processSideHypothesis", description: "error in function " <> show externalFunctionDef.name <> ": " <> err })) pure
         pure result
     rule # substRule (Map.singleton side.resultVarName result) # pure
