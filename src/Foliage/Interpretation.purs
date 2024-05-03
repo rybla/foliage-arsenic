@@ -17,18 +17,14 @@ import Control.Monad.Writer as Writer
 import Data.Array as Array
 import Data.Bifunctor (lmap, rmap)
 import Data.Either (Either(..), either)
-import Data.Generic.Rep (class Generic)
-import Data.Int as Int
-import Data.Lens (Forget(..), Getter', (^.))
+import Data.Lens (Getter', (^.))
 import Data.Lens.Record as Lens.Record
 import Data.List (List(..), (:))
 import Data.List as List
 import Data.Map (Map)
 import Data.Map as Map
 import Data.Maybe (Maybe(..), fromMaybe, maybe)
-import Data.Newtype (class Newtype, over, unwrap)
-import Data.Show.Generic (genericShow)
-import Data.Symbol (class IsSymbol, reflectSymbol)
+import Data.Newtype (class Newtype)
 import Data.Traversable (traverse, traverse_)
 import Data.Tuple (fst)
 import Data.Tuple.Nested (type (/\), (/\))
@@ -37,7 +33,6 @@ import Foliage.App.Rendering (Html, line, render)
 import Foliage.Common (Exc(..), _apply_rule, _compare, _error, fromOpaque, map_Exc_label)
 import Halogen.HTML as HH
 import Type.Proxy (Proxy(..))
-import Unsafe (todo)
 import Unsafe as Unsafe
 
 --------------------------------------------------------------------------------
@@ -74,22 +69,18 @@ data Log
     }
     (Maybe Env)
 
--- instance _Show_Log :: Show Log where
---   show (Log log _env) = "[" <> log.label <> "] " <> ((log.messages <#> show) # Array.intercalate "  ")
+tellLog ::
+  forall m.
+  MonadState Env m =>
+  MonadWriter (Array Log) m =>
+  { label :: String
+  , messages :: Array (String /\ Html)
+  } ->
+  m Unit
 tellLog r = do
   env <- get
   Writer.tell [ Log r (Just env) ]
 
--- data LogMessage
---   = StringLogMessage String
---   | RuleLogMessage String Rule
---   | RipeRuleLogMessage String RipeRule
---   | PropLogMessage String Prop
---   | TermLogMessage String Term
---   | LatticeTypeLogMessage String LatticeType
--- derive instance _Generic_LogMessage :: Generic LogMessage _
--- instance _Show_LogMessage :: Show LogMessage where
---   show = genericShow
 --------------------------------------------------------------------------------
 -- Endpoints
 --------------------------------------------------------------------------------
@@ -129,15 +120,13 @@ interpProgram (Program prog) = do
           , known_props: active_props # map (\{ prop: prop@(Prop prop_name _) } -> Map.singleton prop_name (List.singleton prop)) # Map.unions
           , active_props
           }
+  -- (Exc { label: _error, source: "breakpoint", description: "got here" }) # throwError # void
   err_or_unit /\ env' <-
     fixpointFocusModule
       # runExceptT
       # flip runReaderT ctx
       # flip runStateT env
-  pure ((err_or_unit # either Just (const Nothing)) /\ env')
-
-intDataType :: DataType
-intDataType = NamedDataType (Name "Int")
+  ((err_or_unit # either Just (const Nothing)) /\ env') # pure
 
 --------------------------------------------------------------------------------
 -- Implementation
@@ -181,7 +170,7 @@ learnProp prop@(Prop prop_name _) = do
       tellLog { label: "learn prop . success", messages: [ "prop" /\ (prop # render # line # HH.div []) ] }
       modify_ \(Env env') -> Env env' { known_props = known_props' }
   env.known_props # Map.lookup prop_name
-    # maybe (success Map.empty) \known_props ->
+    # maybe (success Map.empty) \known_props -> do
         insertProp identity known_props prop
           # bindFlipped case _ of
               Left exc -> failure exc
@@ -273,7 +262,6 @@ deferProp ::
 deferProp isNew prop@(Prop prop_name _) = do
   tellLog { label: "defer prop", messages: [ "prop" /\ (prop # render # line # HH.div []), "isNew" /\ (isNew # show # HH.text # pure # HH.div []) ] }
   Env env <- get
-  -- TODO: could also check if subsumed by any known_prop
   let
     failure exc = do
       tellLog { label: "defer prop . failure", messages: [ "prop" /\ (prop # render # line # HH.div []), "reason" /\ (exc # show # HH.text # pure # HH.div []) ] }
@@ -284,16 +272,20 @@ deferProp isNew prop@(Prop prop_name _) = do
   insertProp (Lens.Record.prop (Proxy :: Proxy "prop")) env.active_props { prop, isNew }
     >>= case _ of
         Left exc -> failure exc
-        Right active_props -> do
-          -- env.known_props
-          --   # Map.lookup prop_name
-          --   # maybe (success active_props) \known_props ->
-          --       subsumedByProps identity known_props prop
-          --         # runExceptT
-          --         # bindFlipped case _ of
-          --             Left exc -> failure exc
-          --             Right _ -> success active_props
-          success active_props
+        Right active_props ->
+          if isNew then
+            -- since prop is claimed to be new, check if already known to be subsumed before defering
+            env.known_props
+              # Map.lookup prop_name
+              # maybe (success active_props) \known_props ->
+                  subsumedByProps identity known_props prop
+                    # runExceptT
+                    # bindFlipped case _ of
+                        Left exc -> failure exc
+                        Right _ -> success active_props
+          -- prop is not claimed to be new, so just defer it
+          else
+            success active_props
 
 -- | Defers a `Rule` by inserting it into `ripe_rules` and defering all known
 -- | `Prop`s that can be applied to this rule, to be resolved later.
@@ -443,7 +435,9 @@ compareTerm lty@(NamedLatticeType x) t1 t2 = do
   case lookupModule (Proxy :: Proxy "latticeTypeDefs") x focusModule of
     Nothing -> throwError (Exc { label: _compare, source: "comapreTerm " <> show lty <> " " <> show t1 <> " " <> show t2, description: "could not find lattice type definition with name " <> show x })
     Just latticeTypeDef -> case latticeTypeDef of
-      LatticeTypeDef _ -> compareTerm lty t1 t2
+      LatticeTypeDef lty' -> do
+        -- (Exc { label: _error, source: "compareTerm", description: "got here" }) # throwError # lift # void
+        compareTerm lty' t1 t2
       ExternalLatticeTypeDef extLatticeTypeDef -> do
         case fromOpaque extLatticeTypeDef.compare_impl (t1 /\ t2) # runExceptT # runExcept of
           Left compare_exc -> throwError compare_exc

@@ -3,11 +3,13 @@ module Foliage.Example.Dijkstra (dijkstra) where
 import Data.Tuple.Nested
 import Foliage.Program
 import Prelude hiding (compare)
+
 import Control.Monad.Error.Class (throwError)
 import Control.Monad.Except (ExceptT, Except)
 import Control.Plus (empty)
 import Data.Array as Array
 import Data.Homogeneous.Record (fromHomogeneous, homogeneous)
+import Data.Homogeneous.Record as Homo
 import Data.Int as Int
 import Data.Lazy (Lazy)
 import Data.Lazy as Lazy
@@ -49,10 +51,9 @@ function =
   }
     # homogeneous
     # map (Opaque (Proxy :: Proxy "function"))
-    # fromHomogeneous
 
 compare =
-  { {-"Int":
+  { "Int":
       ( ( case _ of
             LiteralTerm s1 (NamedDataType n1) /\ LiteralTerm s2 (NamedDataType n2)
               | n1 == name.int && n2 == name.int -> do
@@ -62,11 +63,10 @@ compare =
             t1 /\ t2 -> throwError (Exc { label: _error, source: "compare.Int", description: "inputs are not literal Ints: " <> show t1 <> ", " <> show t2 })
         ) ::
           Term /\ Term -> ExceptT (Exc "error") (Except (Exc "compare")) LatticeOrdering
-      )-}
+      )
   }
     # homogeneous
     # map (Opaque (Proxy :: Proxy "compare"))
-    # fromHomogeneous
 
 dijkstra :: Lazy Program
 dijkstra =
@@ -95,8 +95,8 @@ This program implements Dijstra's algorithm for computing the shortest path in a
                         ]
                   , latticeTypeDefs:
                       Map.fromFoldable
-                        [ {-name.int /\ ExternalLatticeTypeDef { name: "Int", compare_impl: compare."Int" }
-                        , -}name.node /\ LatticeTypeDef (DiscreteLatticeType (NamedLatticeType name.int))
+                        [ name.int /\ ExternalLatticeTypeDef { name: "Int", compare_impl: compare `Homo.get` _."Int" }
+                        , name.node /\ LatticeTypeDef (DiscreteLatticeType (NamedLatticeType name.int))
                         , name.weight /\ LatticeTypeDef (OppositeLatticeType (NamedLatticeType name.int))
                         ]
                   , functionDefs:
@@ -106,7 +106,7 @@ This program implements Dijstra's algorithm for computing the shortest path in a
                                 { name: "addWeight"
                                 , inputs: [ "w1" /\ NamedDataType name.weight, "w2" /\ NamedDataType name.weight ]
                                 , output: NamedDataType name.weight
-                                , impl: function.addWeight
+                                , impl: function `Homo.get` _.addWeight
                                 }
                         ]
                   , relations:
