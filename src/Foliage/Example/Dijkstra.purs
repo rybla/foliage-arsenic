@@ -2,7 +2,10 @@ module Foliage.Example.Dijkstra (dijkstra) where
 
 import Data.Tuple.Nested
 import Foliage.Program
-import Prelude
+import Prelude hiding (compare)
+import Control.Monad.Error.Class (throwError)
+import Control.Monad.Except (ExceptT, Except)
+import Control.Plus (empty)
 import Data.Array as Array
 import Data.Homogeneous.Record (fromHomogeneous, homogeneous)
 import Data.Int as Int
@@ -14,8 +17,12 @@ import Data.Map as Map
 import Data.Maybe (Maybe(..), maybe)
 import Data.Newtype (wrap)
 import Data.String as String
-import Data.Tuple (Tuple(..))
+import Data.Tuple (Tuple(..), curry)
 import Data.Tuple.Nested ((/\))
+import Foliage.Common (Exc(..), Opaque(..), _error)
+import Prelude as Prelude
+import Type.Proxy (Proxy(..))
+import Unsafe (todo)
 
 name =
   { int: "Int"
@@ -33,13 +40,33 @@ name =
 
 function =
   { addWeight:
-      wrap \args -> do
+      \args -> do
         w1 <- args # getValidatedArg { f: "addWeight", x: "w1", dt: NamedDataType name.int, dt_name: "Int", fromString: Int.fromString }
         w2 <- args # getValidatedArg { f: "addWeight", x: "w2", dt: NamedDataType name.int, dt_name: "Int", fromString: Int.fromString }
         let
           w3 = w1 + w2
         pure (LiteralTerm (Int.toStringAs Int.decimal w3) (NamedDataType name.int))
   }
+    # homogeneous
+    # map (Opaque (Proxy :: Proxy "function"))
+    # fromHomogeneous
+
+compare =
+  { {-"Int":
+      ( ( case _ of
+            LiteralTerm s1 (NamedDataType n1) /\ LiteralTerm s2 (NamedDataType n2)
+              | n1 == name.int && n2 == name.int -> do
+                x1 <- s1 # Int.fromString # maybe (throwError (Exc { label: _error, source: "compare.Int", description: show s1 <> " is not an Int" })) pure
+                x2 <- s2 # Int.fromString # maybe (throwError (Exc { label: _error, source: "compare.Int", description: show s2 <> " is not an Int" })) pure
+                pure (Prelude.compare x1 x2 /\ empty)
+            t1 /\ t2 -> throwError (Exc { label: _error, source: "compare.Int", description: "inputs are not literal Ints: " <> show t1 <> ", " <> show t2 })
+        ) ::
+          Term /\ Term -> ExceptT (Exc "error") (Except (Exc "compare")) LatticeOrdering
+      )-}
+  }
+    # homogeneous
+    # map (Opaque (Proxy :: Proxy "compare"))
+    # fromHomogeneous
 
 dijkstra :: Lazy Program
 dijkstra =
@@ -68,8 +95,8 @@ This program implements Dijstra's algorithm for computing the shortest path in a
                         ]
                   , latticeTypeDefs:
                       Map.fromFoldable
-                        [ name.int /\ ExternalLatticeTypeDef { name: "Int", compare: "compareInt" }
-                        , name.node /\ LatticeTypeDef (DiscreteLatticeType (NamedLatticeType name.int))
+                        [ {-name.int /\ ExternalLatticeTypeDef { name: "Int", compare_impl: compare."Int" }
+                        , -}name.node /\ LatticeTypeDef (DiscreteLatticeType (NamedLatticeType name.int))
                         , name.weight /\ LatticeTypeDef (OppositeLatticeType (NamedLatticeType name.int))
                         ]
                   , functionDefs:

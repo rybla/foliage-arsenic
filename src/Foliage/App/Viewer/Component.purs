@@ -14,6 +14,7 @@ import Effect.Class.Console as Console
 import Foliage.App.Rendering (line)
 import Foliage.App.Rendering as Rendering
 import Foliage.App.Style as Style
+import Foliage.Common (Exc)
 import Foliage.Interpretation (Env(..))
 import Foliage.Interpretation as Foliage.Interpretation
 import Foliage.Program (Prop, from_RipeRule_to_Rule)
@@ -37,7 +38,7 @@ type State
 data Result
   = OkResult { env :: Env }
   | PendingResult
-  | ErrResult { err :: Foliage.Interpretation.Exc "error", env :: Maybe Env }
+  | ErrResult { err :: Exc "error", env :: Maybe Env }
 
 data Output
   = Ran

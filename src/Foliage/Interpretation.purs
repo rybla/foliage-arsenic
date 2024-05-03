@@ -1,16 +1,14 @@
 module Foliage.Interpretation
   ( interpProgram
   , Log(..)
-  , Exc(..)
   , Env(..)
   ) where
 
 import Foliage.Program
 import Prelude
-
 import Control.Bind (bindFlipped)
 import Control.Monad.Error.Class (class MonadThrow)
-import Control.Monad.Except (ExceptT(..), mapExceptT, runExceptT, throwError)
+import Control.Monad.Except (ExceptT(..), mapExceptT, runExcept, runExceptT, throwError)
 import Control.Monad.Reader (class MonadReader, ask, runReaderT)
 import Control.Monad.State (class MonadState, get, modify, modify_, runStateT)
 import Control.Monad.Trans.Class (lift)
@@ -36,6 +34,7 @@ import Data.Tuple (fst)
 import Data.Tuple.Nested (type (/\), (/\))
 import Debug as Debug
 import Foliage.App.Rendering (Html, line, render)
+import Foliage.Common (Exc(..), _apply_rule, _compare, _error, fromOpaque, map_Exc_label)
 import Halogen.HTML as HH
 import Type.Proxy (Proxy(..))
 import Unsafe (todo)
@@ -54,8 +53,6 @@ newtype Ctx
   = Ctx
   { modules :: Map Name Module
   , focusModule :: Module
-  -- external lattice type name => comparison function over that lattice type
-  , externalCompares :: Map String (String -> String -> Either String Ordering)
   }
 
 derive instance _Newtype_Ctx :: Newtype Ctx _
@@ -69,29 +66,6 @@ newtype Env
   }
 
 derive instance _Newtype_Env :: Newtype Env _
-
-newtype Exc (label :: Symbol)
-  = Exc
-  { label :: Proxy label
-  , source :: String
-  , description :: String
-  }
-
-_apply_rule = Proxy :: Proxy "apply rule"
-
-_compare = Proxy :: Proxy "compare"
-
-_error = Proxy :: Proxy "error"
-
-map_Exc_label :: forall label1 label2. Proxy label2 -> Exc label1 -> Exc label2
-map_Exc_label label (Exc exc) = Exc { label, source: exc.source, description: exc.description }
-
-derive instance _Newtype_Exc :: Newtype (Exc label) _
-
-derive newtype instance _Eq_Exc :: Eq (Exc label)
-
-instance _Show_Exc :: IsSymbol label => Show (Exc label) where
-  show (Exc { label, source, description }) = "[exc . " <> reflectSymbol label <> "] " <> source <> ": " <> description
 
 data Log
   = Log
@@ -133,7 +107,6 @@ interpProgram (Program prog) = do
       Ctx
         { modules: prog.modules
         , focusModule
-        , externalCompares
         }
 
     env =
@@ -162,46 +135,6 @@ interpProgram (Program prog) = do
       # flip runReaderT ctx
       # flip runStateT env
   pure ((err_or_unit # either Just (const Nothing)) /\ env')
-
-externalFunctions :: Map String (Map String Term -> Either String Term)
-externalFunctions =
-  Map.fromFoldable
-    [ let
-        f = "addWeight"
-      in
-        f
-          /\ \args -> do
-              w1 <- let x = "w1" in args # getArg { f, x } (validateInt { f, x })
-              w2 <- let x = "w2" in args # getArg { f, x } (validateInt { f, x })
-              let
-                w = w1 + w2
-              pure (LiteralTerm (Int.toStringAs Int.decimal w) intDataType)
-    ]
-  where
-  getArg :: forall r a. { f :: String, x :: String | r } -> (Term -> Either String a) -> _ -> Either String a
-  getArg { f, x } validate args =
-    Map.lookup x args
-      # maybe (throwExternalFunctionCallError f $ "no argument " <> show x) pure
-      # bindFlipped validate
-
-  validateInt :: forall r. { f :: String, x :: String | r } -> Term -> Either String Int
-  validateInt { f, x } = case _ of
-    LiteralTerm s dty
-      | dty == intDataType -> s # Int.fromString # maybe (throwExternalFunctionCallError f $ s <> " is not an Int") pure
-    t -> throwExternalFunctionCallError f $ "expected arg " <> x <> " = " <> show t <> " to be an Int"
-
-  throwExternalFunctionCallError :: forall a. String -> String -> Either String a
-  throwExternalFunctionCallError f msg = throwError $ "when calling external function " <> f <> ", " <> msg
-
-externalCompares :: Map String (String -> String -> Either String Ordering)
-externalCompares =
-  Map.fromFoldable
-    [ "Int"
-        /\ \x y -> do
-            x :: Int <- Int.fromString x # maybe (throwError $ "when comparing " <> show x <> " and " <> show y <> " as external lattice type \"Int\", expected " <> show x <> " to be a literal integer") pure
-            y :: Int <- Int.fromString y # maybe (throwError $ "when comparing " <> show x <> " and " <> show y <> " as external lattice type \"Int\", expected " <> show y <> " to be a literal integer") pure
-            pure (compare x y)
-    ]
 
 intDataType :: DataType
 intDataType = NamedDataType (Name "Int")
@@ -443,7 +376,7 @@ processSideHypothesis rule = case _ of
         --   Just function -> pure function
         args <- side.args # traverse (evaluateTerm >>> lift)
         result <-
-          unwrap externalFunctionDef.impl (Array.zip externalFunctionDef.inputs args # map (lmap fst) # Map.fromFoldable)
+          fromOpaque externalFunctionDef.impl (Array.zip externalFunctionDef.inputs args # map (lmap fst) # Map.fromFoldable)
             # either (\err -> lift $ throwError (Exc { label: _error, source: "processSideHypothesis", description: "error in function " <> show externalFunctionDef.name <> ": " <> err })) pure
         pure result
     rule # substRule (Map.singleton side.resultVarName result) # pure
@@ -510,16 +443,12 @@ compareTerm lty@(NamedLatticeType x) t1 t2 = do
   case lookupModule (Proxy :: Proxy "latticeTypeDefs") x focusModule of
     Nothing -> throwError (Exc { label: _compare, source: "comapreTerm " <> show lty <> " " <> show t1 <> " " <> show t2, description: "could not find lattice type definition with name " <> show x })
     Just latticeTypeDef -> case latticeTypeDef of
-      LatticeTypeDef lty -> compareTerm lty t1 t2
-      ExternalLatticeTypeDef latticeTypeDef -> do
-        Ctx { externalCompares } <- ask
-        case Map.lookup latticeTypeDef.name externalCompares of
-          Nothing -> throwError (Exc { label: _compare, source: "compareTerm " <> show lty <> " " <> show t1 <> " " <> show t2, description: "could not find compare function for external lattice type " <> show latticeTypeDef.name })
-          Just compare -> case t1 /\ t2 of
-            LiteralTerm s1 _ /\ LiteralTerm s2 _ -> case compare s1 s2 of
-              Left description -> throwError (Exc { label: _compare, source: "compareTerm " <> show lty <> " " <> show t1 <> " " <> show t2, description })
-              Right o -> o /\ Map.empty # pure
-            _ -> lift $ throwError (Exc { label: _error, source: "compareTerm " <> show lty <> " " <> show t1 <> " " <> show t2, description: "terms of an external lattice type are not literals" })
+      LatticeTypeDef _ -> compareTerm lty t1 t2
+      ExternalLatticeTypeDef extLatticeTypeDef -> do
+        case fromOpaque extLatticeTypeDef.compare_impl (t1 /\ t2) # runExceptT # runExcept of
+          Left compare_exc -> throwError compare_exc
+          Right (Left error_exc) -> throwError (error_exc # map_Exc_label _error) # lift
+          Right (Right (o /\ sigma)) -> pure (o /\ sigma)
 
 compareTerm lty@UnitLatticeType t1 t2 = case t1 /\ t2 of
   UnitTerm /\ UnitTerm -> EQ /\ Map.empty # pure

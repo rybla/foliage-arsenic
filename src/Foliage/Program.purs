@@ -3,6 +3,7 @@ module Foliage.Program where
 import Prelude
 import Control.Bind (bindFlipped)
 import Control.Monad.Error.Class (throwError)
+import Control.Monad.Except (ExceptT, Except)
 import Data.Either (Either(..))
 import Data.Eq.Generic (genericEq)
 import Data.Foldable (class Foldable, null)
@@ -18,6 +19,7 @@ import Data.Tuple.Nested (type (/\))
 import Effect.Ref (Ref)
 import Effect.Ref as Ref
 import Effect.Unsafe (unsafePerformEffect)
+import Foliage.Common (Exc, Opaque)
 import Record as Record
 
 data Program
@@ -85,7 +87,10 @@ instance _Show_DataType :: Show DataType where
 
 data LatticeTypeDef
   = LatticeTypeDef LatticeType
-  | ExternalLatticeTypeDef { name :: String, compare :: String }
+  | ExternalLatticeTypeDef
+    { name :: String
+    , compare_impl :: Opaque "compare" (Term /\ Term -> ExceptT (Exc "error") (Except (Exc "compare")) LatticeOrdering)
+    }
 
 derive instance _Generic_LatticeTypeDef :: Generic LatticeTypeDef _
 
@@ -154,7 +159,7 @@ data FunctionDef
     { name :: String
     , inputs :: Array (String /\ DataType)
     , output :: DataType
-    , impl :: OpaqueFunction (Map String Term) (Either String Term)
+    , impl :: Opaque "function" (Map String Term -> Either String Term)
     }
 
 derive instance _Generic_FunctionDef :: Generic FunctionDef _
@@ -359,17 +364,6 @@ derive newtype instance _Show_Name :: Show Name
 
 mainModuleName :: Name
 mainModuleName = Name "Main"
-
-newtype OpaqueFunction a b
-  = OpaqueFunction (a -> b)
-
-derive instance _Newtype_OpaqueFunction :: Newtype (OpaqueFunction a b) _
-
-instance _Eq_OpaqueFunction :: Eq (OpaqueFunction a b) where
-  eq _ _ = false
-
-instance _Show_OpaqueFunction :: Show (OpaqueFunction a b) where
-  show _ = "<function>"
 
 --  Utilities for defining external functions
 getValidatedArg ::
