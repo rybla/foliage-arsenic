@@ -9158,7 +9158,7 @@
     append_edge_distance: "AppendEdgeDistance"
   })));
   var graph1 = /* @__PURE__ */ function() {
-    return new Graph(0, [new Tuple(new Tuple(0, 1), 10), new Tuple(new Tuple(1, 3), 40), new Tuple(new Tuple(0, 2), 20)]);
+    return new Graph(0, [new Tuple(new Tuple(0, 1), 10), new Tuple(new Tuple(1, 3), 40), new Tuple(new Tuple(0, 2), 20), new Tuple(new Tuple(2, 3), 10)]);
   }();
   var $$function = function(dictNewtype) {
     return {
