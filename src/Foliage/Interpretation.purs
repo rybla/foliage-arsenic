@@ -3,7 +3,6 @@ module Foliage.Interpretation
   , Log(..)
   , Exc(..)
   , Env(..)
-  , LogMessage(..)
   ) where
 
 import Foliage.Program
@@ -35,6 +34,8 @@ import Data.Traversable (traverse, traverse_)
 import Data.Tuple (fst)
 import Data.Tuple.Nested (type (/\), (/\))
 import Debug as Debug
+import Foliage.App.Rendering (Html, line, render)
+import Halogen.HTML as HH
 import Type.Proxy (Proxy(..))
 import Unsafe (todo)
 import Unsafe as Unsafe
@@ -96,30 +97,26 @@ instance _Show_Exc :: IsSymbol label => Show (Exc label) where
 data Log
   = Log
     { label :: String
-    , messages :: Array LogMessage
+    , messages :: Array (String /\ Html)
     }
     (Maybe Env)
 
-instance _Show_Log :: Show Log where
-  show (Log log _env) = "[" <> log.label <> "] " <> ((log.messages <#> show) # Array.intercalate "  ")
-
+-- instance _Show_Log :: Show Log where
+--   show (Log log _env) = "[" <> log.label <> "] " <> ((log.messages <#> show) # Array.intercalate "  ")
 tellLog r = do
   env <- get
   Writer.tell [ Log r (Just env) ]
 
-data LogMessage
-  = StringLogMessage String
-  | RuleLogMessage String Rule
-  | RipeRuleLogMessage String RipeRule
-  | PropLogMessage String Prop
-  | TermLogMessage String Term
-  | LatticeTypeLogMessage String LatticeType
-
-derive instance _Generic_LogMessage :: Generic LogMessage _
-
-instance _Show_LogMessage :: Show LogMessage where
-  show = genericShow
-
+-- data LogMessage
+--   = StringLogMessage String
+--   | RuleLogMessage String Rule
+--   | RipeRuleLogMessage String RipeRule
+--   | PropLogMessage String Prop
+--   | TermLogMessage String Term
+--   | LatticeTypeLogMessage String LatticeType
+-- derive instance _Generic_LogMessage :: Generic LogMessage _
+-- instance _Show_LogMessage :: Show LogMessage where
+--   show = genericShow
 --------------------------------------------------------------------------------
 -- Endpoints
 --------------------------------------------------------------------------------
@@ -150,7 +147,7 @@ interpProgram (Program prog) = do
                     rule
                       # nextHypothesis
                       # case _ of
-                          Left conclusion -> Right { prop: conclusion, isNew: false }
+                          Left conclusion -> Right { prop: conclusion, isNew: true }
                           Right { hypothesis: hypothesis@(Hypothesis (Prop prop_name _) _), rule' } -> Left (Map.singleton prop_name (List.singleton { hypothesis, rule' }))
                 )
             # lmap List.fold
@@ -223,8 +220,9 @@ fixpointFocusModule ::
   m Unit
 fixpointFocusModule = do
   Env env <- modify \(Env env) -> (Env env { gas = env.gas - 1 })
+  tellLog { label: "gas = " <> show env.gas, messages: [] }
   when (env.gas <= 0) do
-    tellLog { label: "error", messages: [ "out of gas" # StringLogMessage, show { initialGas } # StringLogMessage ] }
+    tellLog { label: "error", messages: [ "reason" /\ ("out of gas" # HH.text # pure # HH.div []), "initialGas" /\ (initialGas # show # HH.text # pure # HH.div []) ] }
     throwError (Exc { label: _error, source: "fixpointFocusModule", description: "ran out of gas" })
   case env.active_props of
     Nil -> pure unit
@@ -246,10 +244,10 @@ learnProp prop@(Prop prop_name _) = do
   Env env <- get
   let
     failure exc = do
-      tellLog { label: "learn prop . failure", messages: [ exc # show # StringLogMessage ] }
+      tellLog { label: "learn prop . failure", messages: [ "exception" /\ (exc # show # HH.text # pure # HH.div []) ] }
 
     success known_props' = do
-      tellLog { label: "learn prop . success", messages: [ prop # PropLogMessage "prop" ] }
+      tellLog { label: "learn prop . success", messages: [ "prop" /\ (prop # render # line # HH.div []) ] }
       modify_ \(Env env') -> Env env' { known_props = known_props' }
   env.known_props # Map.lookup prop_name
     # maybe (success Map.empty) \known_props ->
@@ -277,9 +275,9 @@ subsumedByProps g props prop = do
                   -- prop >< prop' ==> keep prop'
                   Left _ -> pure (prop' : known_props)
                   -- prop < prop' ==> prop is subsumed; keep prop'
-                  Right (LT /\ _) -> throwError (Exc { label: Proxy :: Proxy "ignore prop", source: "subsumedByProps", description: "given prop is subsumed by other props" })
+                  Right (LT /\ _) -> throwError (Exc { label: Proxy :: Proxy "ignore prop", source: "subsumedByProps", description: show (prop ^. g) <> " is subsumed by " <> show (prop' ^. g) })
                   -- prop = prop' ==> prop is subsumed; keep prop'
-                  Right (EQ /\ _) -> throwError (Exc { label: Proxy :: Proxy "ignore prop", source: "subsumedByProps", description: "given prop is subsumed by other props" })
+                  Right (EQ /\ _) -> throwError (Exc { label: Proxy :: Proxy "ignore prop", source: "subsumedByProps", description: show (prop ^. g) <> " is subsumed by " <> show (prop' ^. g) })
                   -- prop > prop' ==> prop' is subsumed so drop prop'
                   Right (GT /\ _) -> pure known_props
         )
@@ -306,7 +304,7 @@ resolveProp ::
   MonadWriter (Array Log) m =>
   Prop -> m Unit
 resolveProp prop@(Prop prop_name _) = do
-  tellLog { label: "resolve prop", messages: [ prop # PropLogMessage "prop" ] }
+  tellLog { label: "resolve prop", messages: [ "prop" /\ (prop # render # line # HH.div []) ] }
   Env env <- get
   -- rules that result from applying `prop` to a rule
   new_ripe_rules :: List RipeRule <-
@@ -317,11 +315,11 @@ resolveProp prop@(Prop prop_name _) = do
           ( \ripe_rule -> do
               (applyRipeRuleToProp ripe_rule prop # runExceptT)
                 >>= case _ of
-                    Left err -> do
-                      tellLog { label: "resolve prop . apply rule . failure", messages: [ prop # PropLogMessage "prop", ripe_rule # RipeRuleLogMessage "ripe rule", err # show # StringLogMessage ] }
+                    Left exc -> do
+                      tellLog { label: "resolve prop . apply rule . failure", messages: [ "prop" /\ (prop # render # line # HH.div []), "ripe_rule" /\ (ripe_rule # from_RipeRule_to_Rule # render # line # HH.div []), "reason" /\ (exc # show # HH.text # pure # HH.div []) ] }
                       pure Nil
                     Right rule' -> do
-                      tellLog { label: "resolve prop . apply rule . success", messages: [ prop # PropLogMessage "prop", ripe_rule # RipeRuleLogMessage "rule", rule' # RuleLogMessage "rule after subst" ] }
+                      tellLog { label: "resolve prop . apply rule . success", messages: [ "prop" /\ (prop # render # line # HH.div []), "ripe_rule" /\ (ripe_rule # from_RipeRule_to_Rule # render # line # HH.div []), "rule after subst" /\ (rule' # render # line # HH.div []) ] }
                       case nextHypothesis rule' of
                         Left conclusion -> do
                           -- doesn't have any more hypotheses, so just defer its conclusion
@@ -342,27 +340,29 @@ deferProp ::
   MonadThrow (Exc "error") m =>
   Boolean -> Prop -> m Unit
 deferProp isNew prop@(Prop prop_name _) = do
-  tellLog { label: "defer prop", messages: [ prop # PropLogMessage "prop", { isNew } # show # StringLogMessage ] }
+  tellLog { label: "defer prop", messages: [ "prop" /\ (prop # render # line # HH.div []), "isNew" /\ (isNew # show # HH.text # pure # HH.div []) ] }
   Env env <- get
   -- TODO: could also check if subsumed by any known_prop
+  let
+    failure exc = do
+      tellLog { label: "defer prop . failure", messages: [ "prop" /\ (prop # render # line # HH.div []), "reason" /\ (exc # show # HH.text # pure # HH.div []) ] }
+
+    success active_props = do
+      tellLog { label: "defer prop . success", messages: [ "prop" /\ (prop # render # line # HH.div []) ] }
+      modify_ \(Env env') -> Env env' { active_props = active_props }
   insertProp (Lens.Record.prop (Proxy :: Proxy "prop")) env.active_props { prop, isNew }
     >>= case _ of
-        Left exc -> do
-          tellLog { label: "defer prop . failure", messages: [ prop # PropLogMessage "prop", exc # show # StringLogMessage ] }
+        Left exc -> failure exc
         Right active_props -> do
-          let
-            failure exc = do
-              tellLog { label: "defer prop . failure", messages: [ prop # PropLogMessage "prop", exc # show # StringLogMessage ] }
-
-            success = do
-              tellLog { label: "defer prop . success", messages: [ prop # PropLogMessage "prop" ] }
-              modify_ \(Env env') -> Env env' { active_props = active_props }
-          env.known_props # Map.lookup prop_name
-            # maybe success \known_props ->
-                subsumedByProps identity known_props prop # runExceptT
-                  # bindFlipped case _ of
-                      Left exc -> failure exc
-                      Right _ -> success
+          -- env.known_props
+          --   # Map.lookup prop_name
+          --   # maybe (success active_props) \known_props ->
+          --       subsumedByProps identity known_props prop
+          --         # runExceptT
+          --         # bindFlipped case _ of
+          --             Left exc -> failure exc
+          --             Right _ -> success active_props
+          success active_props
 
 -- | Defers a `Rule` by inserting it into `ripe_rules` and defering all known
 -- | `Prop`s that can be applied to this rule, to be resolved later.
@@ -374,7 +374,7 @@ deferRipeRule ::
   MonadWriter (Array Log) m =>
   RipeRule -> m Unit
 deferRipeRule ripe_rule@{ hypothesis: Hypothesis (Prop prop_name _) _ } = do
-  tellLog { label: "defer rule", messages: [ ripe_rule # RipeRuleLogMessage "rule" ] }
+  tellLog { label: "defer rule", messages: [ "ripe_rule" /\ (ripe_rule # from_RipeRule_to_Rule # render # line # HH.div []) ] }
   modify_ \(Env env) -> Env env { ripe_rules = env.ripe_rules # Map.insertWith append prop_name (List.singleton ripe_rule) }
   Env env <- get
   props <-
@@ -397,7 +397,6 @@ applyRipeRuleToProp ::
   MonadState Env m =>
   RipeRule -> Prop -> ExceptT (Exc "apply rule") m Rule
 applyRipeRuleToProp ripe_rule@{ hypothesis: Hypothesis hyp_prop hyp_sides } prop = do
-  tellLog { label: "applyRipeRuleToProp . attempt", messages: [ prop # PropLogMessage "prop", ripe_rule # RipeRuleLogMessage "ripe rule" ] }
   -- first, check if prop satisfies hypothesis_prop
   sigma <-
     compareProp hyp_prop prop
@@ -414,7 +413,6 @@ applyRipeRuleToProp ripe_rule@{ hypothesis: Hypothesis hyp_prop hyp_sides } prop
   rule'' <-
     processSideHypotheses rule' hyp_sides'
       # mapExceptT (map (lmap (map_Exc_label _apply_rule)))
-  tellLog { label: "applyRipeRuleToProp . success", messages: [ prop # PropLogMessage "prop", ripe_rule # RipeRuleLogMessage "ripe rule", rule'' # RuleLogMessage "rule'" ] }
   pure rule''
 
 processSideHypotheses ::
@@ -481,10 +479,10 @@ compareProp prop1@(Prop p1 t1) prop2@(Prop p2 t2) =
     # runExceptT
     # bindFlipped case _ of
         Left exc -> do
-          tellLog { label: "compareProp . failure", messages: [ prop1 # PropLogMessage "prop1", prop2 # PropLogMessage "prop2", exc # show # StringLogMessage ] }
+          tellLog { label: "compareProp . failure", messages: [ "prop1" /\ (prop1 # render # line # HH.div []), "prop2" /\ (prop2 # render # line # HH.div []), "reason" /\ (exc # show # HH.text # pure # HH.div []) ] }
           pure (Left exc)
         Right o -> do
-          tellLog { label: "compareProp . success", messages: [ prop1 # PropLogMessage "prop1", prop2 # PropLogMessage "prop2", o # fst # show # StringLogMessage ] }
+          tellLog { label: "compareProp . success", messages: [ "prop1" /\ (prop1 # render # line # HH.div []), "prop2" /\ (prop2 # render # line # HH.div []), "ordering" /\ (o # fst # show # HH.text # pure # HH.div []) ] }
           pure (Right o)
     # ExceptT
 
