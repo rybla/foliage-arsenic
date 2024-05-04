@@ -1,16 +1,12 @@
 module Foliage.App.Editor.Component where
 
-import Data.Tuple.Nested
 import Prelude
-import BrowserUtility (getJsonFromChangeInputFile, saveJson)
+import Data.Tuple.Nested ((/\))
 import Control.Monad.State (get, modify_)
-import Data.Argonaut (decodeJson, encodeJson, printJsonDecodeError)
 import Data.Array as Array
-import Data.Either (Either(..))
 import Data.Lazy as Lazy
 import Data.Map as Map
 import Data.Maybe (Maybe(..), fromMaybe)
-import Data.Newtype (unwrap)
 import Effect.Aff (Aff)
 import Effect.Class.Console as Console
 import Foliage.App.ComponentLibrary.DropdownMenu as DropdownMenu
@@ -18,15 +14,11 @@ import Foliage.App.Rendering as Rendering
 import Foliage.App.Style as Style
 import Foliage.Example as Example
 import Foliage.Program (Module(..), Name(..), Program(..), mainModuleName)
-import Halogen (Component, defaultEval, liftAff, liftEffect, mkComponent, mkEval)
+import Halogen (Component, defaultEval, mkComponent, mkEval)
 import Halogen as H
 import Halogen.HTML as HH
 import Halogen.HTML.Events as HE
-import Halogen.HTML.Properties as HP
 import Type.Proxy (Proxy(..))
-import Unsafe as Unsafe
-import Web.Event.Internal.Types (Event)
-import Web.HTML.HTMLElement as HTMLElement
 
 data Query a
   = GetProgram (Program -> a)
@@ -147,10 +139,7 @@ component = mkComponent { initialState, eval, render }
                               HH.div [ Style.style $ Style.button_secondary <> [ "width: 10em" ] ]
                                 [ HH.text str ]
                           in
-                            [ label "Blank" /\ Example.blank
-                            , label "Example 1" /\ Example.example1
-                            , label "Dijkstra" /\ Example.dijkstra
-                            ]
+                            Example.examples <#> \(s /\ lazy_prog) -> label s /\ lazy_prog
                       }
                       (SetProgram <<< Lazy.force)
                   ]
