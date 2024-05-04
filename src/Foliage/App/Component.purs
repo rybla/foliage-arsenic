@@ -18,12 +18,15 @@ import Foliage.App.Editor.Component as Editor.Component
 import Foliage.App.Style as Style
 import Foliage.App.Viewer.Component as Viewer.Component
 import Foliage.Example.Dijkstra as Example.Dijkstra
+import Foliage.Example.Parsing as Example.Parsing
 import Foliage.Interpretation as Interpretation
 import Halogen (Component, defaultEval, mkComponent, mkEval)
 import Halogen as H
 import Halogen.HTML as HH
 import Type.Proxy (Proxy(..))
 import Unsafe as Unsafe
+
+default_program = Example.Dijkstra.diamond
 
 data Action
   = EditorOutput Editor.Component.Output
@@ -81,7 +84,7 @@ component = mkComponent { initialState, eval, render }
           , HH.div [ Style.style $ [ "width: calc(100vw - 2em)", "height: calc(100vh - 5em)" ] <> Style.flex_row <> [ "gap: 0" ] ]
               [ HH.div [ Style.style $ [ "height: 100%", "width: 50%", "overflow: scroll" ] <> Style.flex_column ]
                   [ HH.div [ Style.style $ Style.padding_small ]
-                      [ HH.slot _editor unit Editor.Component.component { program: Just (Example.Dijkstra.diamond # Lazy.force) } EditorOutput ]
+                      [ HH.slot _editor unit Editor.Component.component { program: Just (default_program # Lazy.force) } EditorOutput ]
                   ]
               , HH.div [ Style.style $ [ "height: 100%", "width: 50%", "overflow: scroll" ] <> Style.flex_column ]
                   [ HH.div [ Style.style $ Style.padding_small ]

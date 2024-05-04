@@ -49,7 +49,7 @@ instance _Render_Program :: Render Program where
 
 doc_block :: String -> Htmls
 doc_block s =
-  [ HH.div [ Style.style $ Style.padding_small <> Style.font_prose <> [ "max-width: 30em", "background-color: rgba(0, 0, 0, 0.1)" ] ]
+  [ HH.div [ Style.style $ Style.padding_small <> Style.font_prose <> [ "max-width: 30em", "background-color: rgba(0, 0, 0, 0.1)", "white-space: pre-wrap" ] ]
       [ HH.text s ]
   ]
 
