@@ -26,7 +26,8 @@ import Halogen.HTML as HH
 import Type.Proxy (Proxy(..))
 import Unsafe as Unsafe
 
-default_program = Example.Dijkstra.diamond
+-- default_program = Example.Dijkstra.diamond
+default_program = Example.Parsing.nat
 
 data Action
   = EditorOutput Editor.Component.Output

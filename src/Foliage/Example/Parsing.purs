@@ -1,28 +1,29 @@
 module Foliage.Example.Parsing where
 
-import Data.Either.Nested
-import Data.Tuple.Nested
 import Foliage.Program
 import Prelude
 import Control.Monad.Error.Class (throwError)
 import Control.Monad.Except (ExceptT)
 import Control.Plus (empty)
 import Data.Array as Array
-import Data.Either (Either, either)
+import Data.Either (Either)
 import Data.Homogeneous.Record (Homogeneous, fromHomogeneous, homogeneous)
 import Data.Identity (Identity)
 import Data.Int as Int
 import Data.Lazy (Lazy)
 import Data.Lazy as Lazy
+import Data.List (List(..))
 import Data.List as List
 import Data.Map (Map)
 import Data.Map as Map
 import Data.Maybe (Maybe(..), maybe)
-import Data.String.CodeUnits (toCharArray)
-import Data.String.CodeUnits as String
+import Data.String as String
+import Data.String.CodeUnits as String.CodeUnits
+import Data.Tuple.Nested (type (/\), (/\))
 import Foliage.Common (Exc(..), Opaque(..), _error)
 import Prelude as Prelude
 import Type.Proxy (Proxy(..))
+import Unsafe as Unsafe
 
 --------------------------------------------------------------------------------
 -- Examples
@@ -36,8 +37,8 @@ abc =
     )
     ( Input
         ( "abc"
-            # String.toCharArray
-            # map (String.fromCharArray <<< pure)
+            # String.CodeUnits.toCharArray
+            # map (String.CodeUnits.fromCharArray <<< pure)
         )
     )
 
@@ -51,8 +52,8 @@ nat =
     )
     ( Input
         ( "SSSZ"
-            # String.toCharArray
-            # map (String.fromCharArray <<< pure)
+            # String.CodeUnits.toCharArray
+            # map (String.CodeUnits.fromCharArray <<< pure)
         )
     )
 
@@ -70,8 +71,8 @@ ambiguous =
     )
     ( Input
         ( "x+y+z"
-            # String.toCharArray
-            # map (String.fromCharArray <<< pure)
+            # String.CodeUnits.toCharArray
+            # map (String.CodeUnits.fromCharArray <<< pure)
         )
     )
 
@@ -85,31 +86,67 @@ binary_tree =
     )
     ( Input
         ( "((••)(••))"
-            # String.toCharArray
-            # map (String.fromCharArray <<< pure)
+            # String.CodeUnits.toCharArray
+            # map (String.CodeUnits.fromCharArray <<< pure)
         )
     )
 
 --------------------------------------------------------------------------------
 -- Definitions
 --------------------------------------------------------------------------------
-name :: Record _
+name ::
+  Record
+    ( "Index" :: Name
+    , "Int" :: Name
+    , "List String" :: Name
+    , "Parse" :: Name
+    , "String" :: Name
+    , "Symbol" :: Name
+    , joinStrings :: Name
+    )
 name =
   { "Int": "Int"
   , "Index": "Index"
   , "Symbol": "Symbol"
   , "Parse": "Parse"
   , "String": "String"
+  , "List String": "List String"
+  , "joinStrings": "joinStrings"
   }
     # homogeneous
     # map Name
     # fromHomogeneous
 
-function :: Record _
+from_StringList :: Term -> Either String (List String)
+from_StringList = case _ of
+  ConstrTerm "cons" (PairTerm (LiteralTerm s (NamedDataType (Name "String"))) t) -> Cons s <$> from_StringList t
+  ConstrTerm "nil" UnitTerm -> pure mempty
+  _ -> throwError "invalid"
+
+function ::
+  Record
+    ( joinStrings :: Opaque "function" (Map String (TermF Name) -> Either String (TermF Name))
+    )
 function =
-  {}
-    # homogeneous
-    # map (Opaque (Proxy :: Proxy "function"))
+  ( { "joinStrings":
+        \args -> do
+          strs <-
+            args
+              # Map.lookup "strs"
+              # maybe (throwError "did not find arg for parameter 'strs'") from_StringList
+              # map Array.fromFoldable
+          if Array.length strs <= 2 then
+            pure (LiteralTerm (String.joinWith "" strs) (NamedDataType name."String"))
+          else
+            pure (LiteralTerm ("[" <> String.joinWith "" strs <> "]") (NamedDataType name."String"))
+    }
+      # homogeneous
+      # map (Opaque (Proxy :: Proxy "function")) ::
+      Homogeneous
+        ( joinStrings :: Void
+        )
+        (Opaque "function" (Map String Term -> Either String Term))
+  )
     # fromHomogeneous
 
 compare :: Record _
@@ -171,6 +208,7 @@ make_parsing label grammar@(Grammar grammar_rules) input@(Input input_string) =
                 , dataTypeDefs:
                     [ name."Int" /\ ExternalDataTypeDef "Int"
                     , name."String" /\ ExternalDataTypeDef "String"
+                    , name."List String" /\ ExternalDataTypeDef "List String"
                     ]
                       # Map.fromFoldable
                 , latticeTypeDefs:
@@ -181,10 +219,11 @@ make_parsing label grammar@(Grammar grammar_rules) input@(Input input_string) =
                     ]
                       # Map.fromFoldable
                 , functionDefs:
-                    []
+                    [ name."joinStrings" /\ ExternalFunctionDef { name: "joinStrings", inputs: [ "strs" /\ NamedDataType name."List String" ], output: NamedDataType name."String", impl: function."joinStrings" } ]
                       # Map.fromFoldable
                 , relations:
-                    [ name."Parse" /\ Relation { domain: NamedLatticeType name."Symbol" `lex` (NamedLatticeType name."Index" `lex` NamedLatticeType name."Index") } ]
+                    [ name."Parse" /\ Relation { domain: (NamedLatticeType name."Symbol" `lex` NamedLatticeType name."Symbol") `lex` (NamedLatticeType name."Index" `lex` NamedLatticeType name."Index") }
+                    ]
                       # Map.fromFoldable
                 , rules:
                     [ compileGrammar grammar
@@ -202,8 +241,13 @@ lex = ProductLatticeType FirstThenSecond_ProductLatticeTypeOrdering
 pair :: Term -> Term -> Term
 pair = PairTerm
 
-parse :: String -> Term -> Term -> Prop
-parse s i j = Prop name."Parse" (LiteralTerm s (NamedDataType name."String") `pair` (i `pair` j))
+parse :: String -> Term -> Term -> Term -> Prop
+parse sym str i j =
+  Prop name."Parse"
+    ( (LiteralTerm sym (NamedDataType name."String") `pair` str)
+        `pair`
+          (i `pair` j)
+    )
 
 --------------------------------------------------------------------------------
 -- Intermediate grammar representation
@@ -223,13 +267,36 @@ compileGrammar (Grammar prods) =
         Name (nt <> "#" <> show i)
           /\ let
               make_index_var j = VarTerm (Name ("j" <> show j))
+
+              make_str_var j = VarTerm (Name ("s" <> show j))
+
+              res_var_name = Name "res"
+
+              res_var = VarTerm res_var_name
             in
               Rule
                 { hypotheses:
                     rhs
-                      # Array.mapWithIndex (\j s -> Hypothesis (parse s (make_index_var j) (make_index_var (j + 1))) [])
+                      # Array.mapWithIndex (\j s -> Hypothesis (parse s (make_str_var j) (make_index_var j) (make_index_var (j + 1))) [])
+                      # Array.modifyAt (Array.length rhs - 1)
+                          ( \(Hypothesis prop _) ->
+                              Hypothesis prop
+                                [ FunctionSideHypothesis
+                                    { resultVarName: res_var_name
+                                    , functionName: name."joinStrings"
+                                    , args:
+                                        [ rhs
+                                            # (Array.mapWithIndex \k _ -> make_str_var k)
+                                            -- # (\ts -> [ LiteralTerm "⟬" (NamedDataType name."String") ] <> ts <> [ LiteralTerm "⟭" (NamedDataType name."String") ])
+                                            
+                                            # Array.foldr (\h t -> ConstrTerm "cons" (h `pair` t)) (ConstrTerm "nil" UnitTerm)
+                                        ]
+                                    }
+                                ]
+                          )
+                      # Unsafe.fromJust "impossible"
                       # List.fromFoldable
-                , conclusion: parse nt (make_index_var 0) (make_index_var (Array.length rhs))
+                , conclusion: parse nt res_var (make_index_var 0) (make_index_var (Array.length rhs))
                 }
 
 -- | Input array of terminal
@@ -243,5 +310,5 @@ compileInput (Input ss) =
         (Name (s <> "#" <> show i))
           /\ Rule
               { hypotheses: mempty
-              , conclusion: parse s (LiteralTerm (show i) (NamedDataType name."Int")) (LiteralTerm (show (i + 1)) (NamedDataType name."Int"))
+              , conclusion: parse s (LiteralTerm s (NamedDataType name."String")) (LiteralTerm (show i) (NamedDataType name."Int")) (LiteralTerm (show (i + 1)) (NamedDataType name."Int"))
               }

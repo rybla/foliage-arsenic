@@ -180,9 +180,10 @@ instance _Render_Term :: Render Term where
   render = case _ of
     VarTerm x -> x ⊕ []
     LiteralTerm l _ -> Raw l ⊕ []
+    ConstrTerm c t -> Punc "(" ⊕ Prim c ⊕ t ⊕ Punc ")" ⊕ []
     UnitTerm -> Prim "●" ⊕ []
-    LeftTerm t -> Prim "Left" ⊕ t ⊕ []
-    RightTerm t -> Prim "Right" ⊕ t ⊕ []
+    LeftTerm t -> Punc "(" ⊕ Prim "Left" ⊕ t ⊕ Punc ")" ⊕ []
+    RightTerm t -> Punc "(" ⊕ Prim "Right" ⊕ t ⊕ Punc ")" ⊕ []
     PairTerm t1 t2 -> Punc "⟨" ⊕ t1 ⊕ Punc "," ⊕ t2 ⊕ Punc "⟩" ⊕ []
     SetTerm ts -> Punc "{" ⊕ ((ts <#> render) # Array.intercalate (Punc "," ⊕ [])) ⊕ Punc "}" ⊕ []
 
