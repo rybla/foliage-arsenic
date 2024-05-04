@@ -185,7 +185,7 @@ make_parsing label grammar@(Grammar grammar_rules) input@(Input input_string) =
     Program
       { name: Name ("Parsing . " <> label)
       , doc:
-          [ [ "This program implements are parser (recognizer) for the following context-free grammar:"
+          [ [ "This program implements are parser for the following context-free grammar:"
             , ""
             ]
           , grammar_rules <#> \(s /\ ss) -> "    " <> s <> " → " <> (ss # Array.intercalate "")

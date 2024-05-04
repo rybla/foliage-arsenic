@@ -9812,7 +9812,7 @@
         return defer2(function(v2) {
           return new Program({
             name: "Parsing . " + label5,
-            doc: new Just(intercalate6("\n")(concat([["This program implements are parser (recognizer) for the following context-free grammar:", ""], mapFlipped7(v.value0)(function(v3) {
+            doc: new Just(intercalate6("\n")(concat([["This program implements are parser for the following context-free grammar:", ""], mapFlipped7(v.value0)(function(v3) {
               return "    " + (v3.value0 + (" \u2192 " + intercalate6("")(v3.value1)));
             }), ["", "The input string is: ", "", "    " + intercalate6("")(v1.value0), ""]]))),
             modules: singleton6(mainModuleName)(new Module({
