@@ -1,4 +1,4 @@
-module Foliage.Example.Blank where
+module Foliage.Example.Parsing where
 
 import Foliage.Program
 
@@ -7,8 +7,8 @@ import Data.Lazy as Lazy
 import Data.Map as Map
 import Data.Maybe (Maybe(..))
 
-blank :: Lazy Program
-blank =
+parsing :: Lazy Program
+parsing =
   Lazy.defer \_ ->
     Program
       { name: Name "Main"
@@ -18,7 +18,7 @@ blank =
             ( Module
                 { name: mainModuleName
                 , doc: Nothing
-                , initialGas: 100
+                , initialGas: 40
                 , dataTypeDefs: Map.empty
                 , functionDefs: Map.empty
                 , latticeTypeDefs: Map.empty

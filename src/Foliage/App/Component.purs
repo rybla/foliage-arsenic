@@ -81,7 +81,7 @@ component = mkComponent { initialState, eval, render }
           , HH.div [ Style.style $ [ "width: calc(100vw - 2em)", "height: calc(100vh - 5em)" ] <> Style.flex_row <> [ "gap: 0" ] ]
               [ HH.div [ Style.style $ [ "height: 100%", "width: 50%", "overflow: scroll" ] <> Style.flex_column ]
                   [ HH.div [ Style.style $ Style.padding_small ]
-                      [ HH.slot _editor unit Editor.Component.component { program: Just (Example.Dijkstra.dijkstra # Lazy.force) } EditorOutput ]
+                      [ HH.slot _editor unit Editor.Component.component { program: Just (Example.Dijkstra.diamond # Lazy.force) } EditorOutput ]
                   ]
               , HH.div [ Style.style $ [ "height: 100%", "width: 50%", "overflow: scroll" ] <> Style.flex_column ]
                   [ HH.div [ Style.style $ Style.padding_small ]

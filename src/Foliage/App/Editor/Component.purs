@@ -59,6 +59,7 @@ component = mkComponent { initialState, eval, render }
                         ( Module
                             { name: mainModuleName
                             , doc: Nothing
+                            , initialGas: 40
                             , dataTypeDefs: Map.empty
                             , latticeTypeDefs: Map.empty
                             , functionDefs: Map.empty
@@ -136,7 +137,7 @@ component = mkComponent { initialState, eval, render }
                       , items:
                           let
                             label str =
-                              HH.div [ Style.style $ Style.button_secondary <> [ "width: 10em" ] ]
+                              HH.div [ Style.style $ Style.button_secondary <> [ "width: 20em" ] ]
                                 [ HH.text str ]
                           in
                             Example.examples <#> \(s /\ lazy_prog) -> label s /\ lazy_prog

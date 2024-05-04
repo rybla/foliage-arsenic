@@ -43,6 +43,7 @@ data Module
   = Module
     { name :: Name
     , doc :: Maybe String
+    , initialGas :: Int
     , dataTypeDefs :: Map Name DataTypeDef
     , latticeTypeDefs :: Map Name LatticeTypeDef
     , functionDefs :: Map Name FunctionDef

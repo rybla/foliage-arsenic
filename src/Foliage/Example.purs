@@ -9,5 +9,6 @@ import Foliage.Program (Program)
 examples :: Array (String /\ Lazy Program)
 examples =
   [ "Blank" /\ Blank.blank
-  , "Dijkstra" /\ Dijkstra.dijkstra
+  , "Dijkstra . Diamond" /\ Dijkstra.diamond
+  , "Dijkstra . Cycle" /\ Dijkstra.cycle
   ]

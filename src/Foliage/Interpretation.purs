@@ -1,11 +1,7 @@
-module Foliage.Interpretation
-  ( interpProgram
-  , Log(..)
-  , Env(..)
-  ) where
+module Foliage.Interpretation where
 
-import Foliage.Program
 import Prelude
+import Foliage.Program
 import Control.Bind (bindFlipped)
 import Control.Monad.Error.Class (class MonadThrow)
 import Control.Monad.Except (ExceptT(..), mapExceptT, runExcept, runExceptT, throwError)
@@ -34,12 +30,6 @@ import Foliage.Common (Exc(..), _apply_rule, _compare, _error, fromOpaque, map_E
 import Halogen.HTML as HH
 import Type.Proxy (Proxy(..))
 import Unsafe as Unsafe
-
---------------------------------------------------------------------------------
--- Constants
---------------------------------------------------------------------------------
-initialGas :: Int
-initialGas = 100
 
 --------------------------------------------------------------------------------
 -- Types
@@ -115,12 +105,11 @@ interpProgram (Program prog) = do
             # lmap List.fold
       in
         Env
-          { gas: initialGas
+          { gas: main.initialGas
           , ripe_rules
           , known_props: active_props # map (\{ prop: prop@(Prop prop_name _) } -> Map.singleton prop_name (List.singleton prop)) # Map.unions
           , active_props
           }
-  -- (Exc { label: _error, source: "breakpoint", description: "got here" }) # throwError # void
   err_or_unit /\ env' <-
     fixpointFocusModule
       # runExceptT
@@ -140,12 +129,15 @@ fixpointFocusModule ::
   m Unit
 fixpointFocusModule = do
   Env env <- modify \(Env env) -> (Env env { gas = env.gas - 1 })
+  Ctx { focusModule: Module main } <- ask
   tellLog { label: "gas = " <> show env.gas, messages: [] }
   when (env.gas <= 0) do
-    tellLog { label: "error", messages: [ "reason" /\ ("out of gas" # HH.text # pure # HH.div []), "initialGas" /\ (initialGas # show # HH.text # pure # HH.div []) ] }
+    tellLog { label: "error", messages: [ "reason" /\ ("out of gas" # HH.text # pure # HH.div []), "initialGas" /\ (main.initialGas # show # HH.text # pure # HH.div []) ] }
     throwError (Exc { label: _error, source: "fixpointFocusModule", description: "ran out of gas" })
   case env.active_props of
-    Nil -> pure unit
+    Nil -> do
+      tellLog { label: "done", messages: [ "gas" /\ (env.gas # show # HH.text # pure # HH.div []) ] }
+      pure unit
     Cons active_prop active_props -> do
       modify_ \(Env env') -> (Env env' { active_props = active_props })
       when active_prop.isNew do
@@ -176,7 +168,7 @@ learnProp prop@(Prop prop_name _) = do
               Left exc -> failure exc
               Right known_props' -> success (env.known_props # Map.insert prop_name known_props')
 
-subsumedByProps ::
+joinProps ::
   forall m a.
   Monad m =>
   MonadReader Ctx m =>
@@ -184,7 +176,7 @@ subsumedByProps ::
   MonadState Env m =>
   MonadWriter (Array Log) m =>
   Getter' a Prop -> List a -> a -> ExceptT (Exc "ignore prop") m (List a)
-subsumedByProps g props prop = do
+joinProps g props prop = do
   props
     # List.foldM
         ( \known_props prop' -> do
@@ -194,12 +186,14 @@ subsumedByProps g props prop = do
               # bindFlipped case _ of
                   -- prop >< prop' ==> keep prop'
                   Left _ -> pure (prop' : known_props)
-                  -- prop < prop' ==> prop is subsumed; keep prop'
-                  Right (LT /\ _) -> throwError (Exc { label: Proxy :: Proxy "ignore prop", source: "subsumedByProps", description: show (prop ^. g) <> " is subsumed by " <> show (prop' ^. g) })
-                  -- prop = prop' ==> prop is subsumed; keep prop'
-                  Right (EQ /\ _) -> throwError (Exc { label: Proxy :: Proxy "ignore prop", source: "subsumedByProps", description: show (prop ^. g) <> " is subsumed by " <> show (prop' ^. g) })
+                  -- prop < prop' ==> prop is subsumed
+                  Right (LT /\ _) -> throwError (Exc { label: Proxy :: Proxy "ignore prop", source: "joinProps", description: show (prop ^. g) <> " is subsumed by " <> show (prop' ^. g) })
+                  -- prop = prop' ==> prop is subsumed
+                  Right (EQ /\ _) -> throwError (Exc { label: Proxy :: Proxy "ignore prop", source: "joinProps", description: show (prop ^. g) <> " is subsumed by " <> show (prop' ^. g) })
                   -- prop > prop' ==> prop' is subsumed so drop prop'
-                  Right (GT /\ _) -> pure known_props
+                  Right (GT /\ _) -> do
+                    tellLog { label: "joinProps . prop subsumes prop'", messages: [ "prop" /\ (prop ^. g # render # line # HH.div []), "prop'" /\ (prop' ^. g # render # line # HH.div []) ] }
+                    pure known_props
         )
         Nil
 
@@ -213,7 +207,7 @@ insertProp ::
   Getter' a Prop -> List a -> a -> m (Either (Exc "ignore prop") (List a))
 insertProp g props prop =
   runExceptT do
-    props' <- subsumedByProps g props prop
+    props' <- joinProps g props prop
     List.snoc props' prop # pure
 
 resolveProp ::
@@ -278,7 +272,7 @@ deferProp isNew prop@(Prop prop_name _) = do
             env.known_props
               # Map.lookup prop_name
               # maybe (success active_props) \known_props ->
-                  subsumedByProps identity known_props prop
+                  joinProps identity known_props prop
                     # runExceptT
                     # bindFlipped case _ of
                         Left exc -> failure exc
@@ -386,28 +380,16 @@ compareProp ::
   forall m.
   MonadReader Ctx m =>
   MonadThrow (Exc "error") m =>
-  MonadState Env m =>
   MonadWriter (Array Log) m =>
   Prop -> Prop -> ExceptT (Exc "compare") m LatticeOrdering
-compareProp prop1@(Prop p1 t1) prop2@(Prop p2 t2) =
-  ( do
-      unless (p1 == p2) do
-        throwError (Exc { label: _compare, source: "compareProp", description: show p1 <> " != " <> show p2 })
-      Ctx { focusModule: Module { relations } } <- ask
-      domain <- case Map.lookup p1 relations of
-        Nothing -> throwError (Exc { label: _compare, source: "compareProp", description: "could not find relation " <> show (show p1) })
-        Just (Relation { domain }) -> pure domain
-      compareTerm domain t1 t2
-  )
-    # runExceptT
-    # bindFlipped case _ of
-        Left exc -> do
-          tellLog { label: "compareProp . failure", messages: [ "prop1" /\ (prop1 # render # line # HH.div []), "prop2" /\ (prop2 # render # line # HH.div []), "reason" /\ (exc # show # HH.text # pure # HH.div []) ] }
-          pure (Left exc)
-        Right o -> do
-          tellLog { label: "compareProp . success", messages: [ "prop1" /\ (prop1 # render # line # HH.div []), "prop2" /\ (prop2 # render # line # HH.div []), "ordering" /\ (o # fst # show # HH.text # pure # HH.div []) ] }
-          pure (Right o)
-    # ExceptT
+compareProp (Prop p1 t1) (Prop p2 t2) = do
+  unless (p1 == p2) do
+    throwError (Exc { label: _compare, source: "compareProp", description: show p1 <> " != " <> show p2 })
+  Ctx { focusModule: Module { relations } } <- ask
+  domain <- case Map.lookup p1 relations of
+    Nothing -> Exc { label: _error, source: "compareProp", description: "could not find relation " <> show (show p1) } # throwError # lift
+    Just (Relation { domain }) -> pure domain
+  compareTerm domain t1 t2
 
 -- | Assumes that terms to have the same type type.
 -- TODO: check for consistent substitution
@@ -495,7 +477,7 @@ compareTerm (OppositeLatticeType lty) t1 t2 =
     >>= case _ of
         LT /\ sigma -> GT /\ sigma # pure
         EQ /\ sigma -> EQ /\ sigma # pure
-        GT /\ sigma -> GT /\ sigma # pure
+        GT /\ sigma -> LT /\ sigma # pure
 
 compareTerm (DiscreteLatticeType lty) t1 t2 =
   compareTerm lty t1 t2
