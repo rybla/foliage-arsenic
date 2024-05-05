@@ -87,14 +87,14 @@ compare =
     # map (Opaque (Proxy :: Proxy "compare"))
     # fromHomogeneous
 
+dtyInt :: DataType
+dtyInt = NamedDataType name."Int"
+
 dtyString :: DataType
 dtyString = NamedDataType name."String"
 
 ltyString :: LatticeType
 ltyString = NamedLatticeType name."String"
-
-dtyIndex :: DataType
-dtyIndex = NamedDataType name."Index"
 
 ltyIndex :: LatticeType
 ltyIndex = NamedLatticeType name."Index"
@@ -142,51 +142,26 @@ make_typing label =
                             )
                     , name."Term"
                         /\ LatticeTypeDef
-                            ( (ltySymbol {- lam -} `prod12` (ltyVar `prod12` ltyTerm))
+                            ( (ltySymbol {- lam -} `prod12` ltyTerm)
                                 `sumLIR`
                                   (ltySymbol {- var -} `prod12` ltyVar)
                             )
                     , name."Context"
                         /\ LatticeTypeDef
-                            ( ltySymbol {- extend -} `prod12` (ltyVar `prod12` ltyType `prod12` ltyContext)
+                            ( ltySymbol {- extend -} `prod12` (ltyType `prod12` ltyContext)
                                 `sumLIR`
                                   ltySymbol {- empty -}
                             )
+                    , name."Var" /\ LatticeTypeDef ltyIndex
                     ]
                       # Map.fromFoldable
                       # Map.union Library.latticeTypeDefs
                 , relations:
-                    [ name."Parsed"
-                        /\ Relation
-                            -- Parsed (Term * (Index * Index))
-                            { domain:
-                                ltyTerm
-                                  `prod12`
-                                    (ltyIndex `prod12` ltyIndex)
-                            }
+                    -- Parsed (Term * (Index * Index))
+                    [ name."Parsed" /\ Relation { domain: ltyTerm `prod12` (ltyIndex `prod12` ltyIndex) }
+                    -- Typed ((Term * (Index * Index)) * (Context * Type))
                     , name."Typed"
-                        /\ Relation
-                            -- Typed ((Term * (Index * Index)) * (Context * Type))
-                            { domain:
-                                ( (ltyTerm)
-                                    `prod12`
-                                      (ltyIndex `prod12` ltyIndex)
-                                )
-                                  `prod12`
-                                    (ltyContext `prod12` ltyType)
-                            }
-                    , name."Typed Var"
-                        -- Typed Var (Term * (Context * Type))
-                        
-                        /\ Relation
-                            { domain:
-                                ltyTerm
-                                  `prod12`
-                                    ( ltyContext
-                                        `prod12`
-                                          ltyType
-                                    )
-                            }
+                        /\ Relation { domain: (ltyTerm `prod12` (ltyIndex `prod12` ltyIndex)) `prod12` (ltyContext `prod12` ltyType) }
                     ]
                       # Map.fromFoldable
                       # Map.union Library.relations
@@ -197,8 +172,6 @@ make_typing label =
                 , rules:
                     [ let
                         ctx = Name "ctx"
-
-                        x = Name "x"
 
                         α = Name "α"
 
@@ -219,19 +192,19 @@ make_typing label =
                               { hypotheses:
                                   [ Hypothesis
                                       -- lam x α β | i0 -> i3
-                                      (parsed (lamTerm (VarTerm x) (VarTerm b)) (VarTerm i0) (VarTerm i3))
+                                      (parsed (lamTerm (VarTerm b)) (VarTerm i0) (VarTerm i3))
                                       []
                                   , Hypothesis
                                       -- x : α , Γ ⊢ b : β | i1 -> i2
-                                      (typed (VarTerm b) (VarTerm i1) (VarTerm i2) (extendContext (VarTerm x) (VarTerm α) (VarTerm ctx)) (VarTerm β))
+                                      (typed (VarTerm b) (VarTerm i1) (VarTerm i2) (extendContext (VarTerm α) (VarTerm ctx)) (VarTerm β))
                                       []
                                   ]
                                     # List.fromFoldable
                               , conclusion:
                                   -- Γ ⊢ lam x α b : a -> b | i0 -> i3
-                                  typed (lamTerm (VarTerm x) (VarTerm b)) (VarTerm i0) (VarTerm i3) (VarTerm ctx) (arrowType (VarTerm α) (VarTerm β))
+                                  typed (lamTerm (VarTerm b)) (VarTerm i0) (VarTerm i3) (VarTerm ctx) (arrowType (VarTerm α) (VarTerm β))
                               }
-                    , Name "var"
+                    , Name "var #0"
                         /\ let
                             x = Name "x"
 
@@ -244,48 +217,14 @@ make_typing label =
                             α = Name "α"
                           in
                             Rule
-                              { hypotheses:
-                                  -- Γ ⊢ x : α
-                                  [ Hypothesis (parsed (VarTerm x) (VarTerm i0) (VarTerm i1)) []
-                                  , Hypothesis (typedVar (VarTerm x) (VarTerm ctx) (VarTerm α)) []
-                                  ]
-                                    # List.fromFoldable
+                              { hypotheses: empty
                               , conclusion:
-                                  -- Γ ⊢ x : α [i0 -> i1]
-                                  typed (varTerm (VarTerm x)) (VarTerm i0) (VarTerm i1) (VarTerm ctx) (VarTerm α)
+                                  -- Γ ⊢ #0 : α [i0 -> i1]
+                                  typed (varTerm (LiteralTerm (show 0) dtyInt)) (VarTerm i0) (VarTerm i1) (extendContext (VarTerm α) (VarTerm ctx)) (VarTerm α)
                               }
-                    , Name "var in context right here"
-                        /\ let
-                            x = Name "x"
-
-                            α = Name "α"
-
-                            ctx = Name "ctx"
-                          in
-                            Rule
-                              { hypotheses: [] # List.fromFoldable
-                              , conclusion: typedVar (VarTerm x) (extendContext (VarTerm x) (VarTerm α) (VarTerm ctx)) (VarTerm α)
-                              }
-                    , Name "var in context somewhere else"
-                        /\ let
-                            x = Name "x"
-
-                            α = Name "α"
-
-                            β = Name "β"
-
-                            ctx = Name "ctx"
-                          in
-                            Rule
-                              { hypotheses:
-                                  [ Hypothesis (typedVar (VarTerm x) (VarTerm ctx) (VarTerm α)) [] ]
-                                    # List.fromFoldable
-                              , conclusion: typedVar (VarTerm x) (extendContext (VarTerm x) (VarTerm β) (VarTerm ctx)) (VarTerm α)
-                              }
-                    -- input parsed term 
-                    , Name "lam | 1 -> 4" /\ Rule { hypotheses: empty, conclusion: parsed (lamTerm (LiteralTerm "x" (dtyString)) (varTerm (LiteralTerm "x" (dtyString)))) (LiteralTerm (show 1) (dtyString)) (LiteralTerm (show 4) (dtyString)) }
-                    , Name "x | 1 -> 2" /\ Rule { hypotheses: empty, conclusion: parsed (varTerm (LiteralTerm "x" (dtyString))) (LiteralTerm (show 1) (dtyString)) (LiteralTerm (show 2) (dtyString)) }
-                    , Name "x | 2 -> 3" /\ Rule { hypotheses: empty, conclusion: parsed (varTerm (LiteralTerm "x" (dtyString))) (LiteralTerm (show 2) (dtyString)) (LiteralTerm (show 3) (dtyString)) }
+                    -- input parsed term: lam (lam #1)
+                    , Name "lam | 1 -> 4" /\ Rule { hypotheses: empty, conclusion: parsed (lamTerm (varTerm (LiteralTerm (show 0) dtyInt))) (LiteralTerm (show 1) dtyInt) (LiteralTerm (show 4) dtyInt) }
+                    , Name "#0 | 2 -> 3" /\ Rule { hypotheses: empty, conclusion: parsed (varTerm (LiteralTerm (show 0) dtyInt)) (LiteralTerm (show 2) dtyInt) (LiteralTerm (show 3) dtyInt) }
                     ]
                       # Map.fromFoldable
                       # Map.union Library.rules
@@ -293,32 +232,29 @@ make_typing label =
             )
       }
 
-lamTerm :: Term -> Term -> Term
-lamTerm x b = LeftTerm ((LiteralTerm "lam" (dtyString)) `pair` (x `pair` b))
+lamTerm :: Term -> Term
+lamTerm b = LeftTerm ((LiteralTerm "lam" dtyString) `pair` b)
 
 varTerm :: Term -> Term
-varTerm x = RightTerm ((LiteralTerm "var" (dtyString)) `pair` x)
+varTerm x = RightTerm ((LiteralTerm "var" dtyString) `pair` x)
 
 arrowType :: Term -> Term -> Term
-arrowType α β = LeftTerm ((LiteralTerm "arrow" (dtyString)) `pair` (α `pair` β))
+arrowType α β = LeftTerm ((LiteralTerm "arrow" dtyString) `pair` (α `pair` β))
 
 unitType :: forall x110. TermF x110
-unitType = RightTerm ((LiteralTerm "unit" (dtyString)))
+unitType = RightTerm ((LiteralTerm "unit" dtyString))
 
-extendContext :: Term -> Term -> Term -> Term
-extendContext x α ctx = LeftTerm ((LiteralTerm "extend" (dtyString) `pair` ((x `pair` α) `pair` ctx)))
+extendContext :: Term -> Term -> Term
+extendContext α ctx = LeftTerm ((LiteralTerm "extend" dtyString `pair` (α `pair` ctx)))
 
 emptyContext :: Term
-emptyContext = RightTerm (LiteralTerm "empty" (dtyString))
+emptyContext = RightTerm (LiteralTerm "empty" dtyString)
 
 parsed :: Term -> Term -> Term -> Prop
 parsed tm i j = Prop name."Parsed" (tm `pair` (i `pair` j))
 
 typed :: Term -> Term -> Term -> Term -> Term -> Prop
 typed tm i j ctx ty = Prop name."Typed" ((tm `pair` (i `pair` j)) `pair` (ctx `pair` ty))
-
-typedVar :: Term -> Term -> Term -> Prop
-typedVar x ctx ty = Prop name."Typed Var" (x `pair` (ctx `pair` ty))
 
 --------------------------------------------------------------------------------
 -- Intermediate typing rules representation

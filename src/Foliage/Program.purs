@@ -337,7 +337,7 @@ substTerm sigma (SetTerm ts) = SetTerm (ts <#> substTerm sigma)
 freshName :: Unit -> Name
 freshName _ =
   unsafePerformEffect do
-    n <- freshNameIndexRef # Ref.read # map (\i -> wrap (show i))
+    n <- freshNameIndexRef # Ref.read # map (\i -> wrap ("♯" <> show i))
     freshNameIndexRef # Ref.modify_ (_ + 1)
     pure n
 

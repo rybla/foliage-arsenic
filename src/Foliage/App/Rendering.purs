@@ -147,7 +147,7 @@ instance _Render_DataType :: Render DataType where
     ProductDataType f s -> Punc "(" ⊕ f ⊕ Punc "*" ⊕ s ⊕ Punc ")" ⊕ []
 
 line :: Htmls -> Htmls
-line = HH.div [ Style.style $ Style.flex_row <> [ "gap: 0.8em", "display: inline-flex", "white-space: flex-wrap" ] ] >>> pure
+line = HH.div [ Style.style $ Style.flex_row <> [ "gap: 0.5em", "display: inline-flex", "white-space: flex-wrap" ] ] >>> pure
 
 -- | Puntuation
 newtype Punc

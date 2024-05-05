@@ -1,7 +1,7 @@
 module Foliage.Interpretation where
 
-import Prelude
 import Foliage.Program
+import Prelude
 import Control.Bind (bindFlipped)
 import Control.Monad.Error.Class (class MonadThrow)
 import Control.Monad.Except (ExceptT(..), mapExceptT, runExcept, runExceptT, throwError)
@@ -29,6 +29,7 @@ import Foliage.App.Rendering (Html, line, render)
 import Foliage.Common (Exc(..), _apply_rule, _compare, _error, fromOpaque, map_Exc_label)
 import Halogen.HTML as HH
 import Type.Proxy (Proxy(..))
+import Unsafe (todo)
 import Unsafe as Unsafe
 
 --------------------------------------------------------------------------------
@@ -306,6 +307,9 @@ deferRipeRule ripe_rule@{ hypothesis: Hypothesis (Prop prop_name _) _ } = do
           )
   props # traverse_ (deferProp false)
 
+freshenRipeRule :: RipeRule -> RipeRule
+freshenRipeRule ripe_rule = todo "freshenRipeRule"
+
 applyRipeRuleToProp ::
   forall m.
   MonadReader Ctx m =>
@@ -313,7 +317,8 @@ applyRipeRuleToProp ::
   MonadWriter (Array Log) m =>
   MonadState Env m =>
   RipeRule -> Prop -> ExceptT (Exc "apply rule") m Rule
-applyRipeRuleToProp ripe_rule@{ hypothesis: Hypothesis hyp_prop hyp_sides } prop = do
+applyRipeRuleToProp ripe_rule prop = do
+  ripe_rule@{ hypothesis: Hypothesis hyp_prop hyp_sides } <- freshenRipeRule ripe_rule # pure
   -- first, check if prop satisfies hypothesis_prop
   sigma <-
     compareProp hyp_prop prop
@@ -399,15 +404,14 @@ compareTerm ::
   MonadReader Ctx m =>
   MonadWriter (Array Log) m =>
   LatticeType -> Term -> Term -> ExceptT (Exc "compare") m LatticeOrdering
-compareTerm _lty (VarTerm x1) (VarTerm x2) =
-  EQ
-    /\ ( Map.fromFoldable
-          [ x1 /\ VarTerm (freshName unit)
-          , x2 /\ VarTerm (freshName unit)
-          ]
-      )
-    # pure
-
+-- compareTerm _lty (VarTerm x1) (VarTerm x2) =
+--   EQ
+--     /\ ( Map.fromFoldable
+--           [ x1 /\ VarTerm (freshName unit)
+--           , x2 /\ VarTerm (freshName unit)
+--           ]
+--       )
+--     # pure
 compareTerm _lty t1 (VarTerm x2) = EQ /\ (Map.singleton x2 t1) # pure
 
 compareTerm _lty (VarTerm x1) t2 = EQ /\ (Map.singleton x1 t2) # pure
