@@ -5159,6 +5159,7 @@
   var padding_horizontal_big = ["padding: 0 1.0em"];
   var padding_big = ["padding: 1em"];
   var margin_small = ["margin: 0.5em"];
+  var italic = ["font-style: italic"];
   var horizontal_bar = ["width: 100%", "height: 2px", "background-color: black", "border-radius: 50px"];
   var hidden = ["display: none", "visibility: hidden"];
   var font_prose = ["font-family: serif"];
@@ -7829,9 +7830,9 @@
     }
   }));
   var genericShowArgsProduct2 = /* @__PURE__ */ genericShowArgsProduct(genericShowArgsArgument2);
-  var ConstrTermIsSymbol = {
+  var ConTermIsSymbol = {
     reflectSymbol: function() {
-      return "ConstrTerm";
+      return "ConTerm";
     }
   };
   var LeftTermIsSymbol = {
@@ -8121,18 +8122,18 @@
     };
     return LiteralTerm2;
   }();
-  var ConstrTerm = /* @__PURE__ */ function() {
-    function ConstrTerm2(value0, value1) {
+  var ConTerm = /* @__PURE__ */ function() {
+    function ConTerm2(value0, value1) {
       this.value0 = value0;
       this.value1 = value1;
     }
     ;
-    ConstrTerm2.create = function(value0) {
+    ConTerm2.create = function(value0) {
       return function(value1) {
-        return new ConstrTerm2(value0, value1);
+        return new ConTerm2(value0, value1);
       };
     };
-    return ConstrTerm2;
+    return ConTerm2;
   }();
   var LeftTerm = /* @__PURE__ */ function() {
     function LeftTerm2(value0) {
@@ -8349,8 +8350,8 @@
         return new LiteralTerm(v1.value0, v1.value1);
       }
       ;
-      if (v1 instanceof ConstrTerm) {
-        return new ConstrTerm(v1.value0, substTerm(v)(v1.value1));
+      if (v1 instanceof ConTerm) {
+        return new ConTerm(v1.value0, substTerm(v)(v1.value1));
       }
       ;
       if (v1 instanceof UnitTerm) {
@@ -8429,7 +8430,7 @@
       }
       ;
       if (x instanceof Inr && (x.value0 instanceof Inr && (x.value0.value0 instanceof Inr && x.value0.value0.value0 instanceof Inl))) {
-        return new ConstrTerm(x.value0.value0.value0.value0.value0, x.value0.value0.value0.value0.value1);
+        return new ConTerm(x.value0.value0.value0.value0.value0, x.value0.value0.value0.value0.value1);
       }
       ;
       if (x instanceof Inr && (x.value0 instanceof Inr && (x.value0.value0 instanceof Inr && (x.value0.value0.value0 instanceof Inr && x.value0.value0.value0.value0 instanceof Inl)))) {
@@ -8463,7 +8464,7 @@
         return new Inr(new Inr(new Inl(new Product(x.value0, x.value1))));
       }
       ;
-      if (x instanceof ConstrTerm) {
+      if (x instanceof ConTerm) {
         return new Inr(new Inr(new Inr(new Inl(new Product(x.value0, x.value1)))));
       }
       ;
@@ -8740,7 +8741,7 @@
     var genericShowSum6 = genericShowSum(genericShowConstructor(genericShowArgsArgument(dictShow))(VarTermIsSymbol));
     return {
       show: function(x) {
-        return genericShow2(genericShowSum6(genericShowSum22(genericShowSum5(genericShowSum(genericShowConstructor(genericShowArgsProduct2(genericShowArgsArgument(_Show_Term(dictShow))))(ConstrTermIsSymbol))(genericShowSum(genericShowConstructor(genericShowArgsArgument(_Show_Term(dictShow)))(LeftTermIsSymbol))(genericShowSum(genericShowConstructor(genericShowArgsArgument(_Show_Term(dictShow)))(RightTermIsSymbol))(genericShowSum(genericShowConstructor(genericShowArgsProduct(genericShowArgsArgument(_Show_Term(dictShow)))(genericShowArgsArgument(_Show_Term(dictShow))))(PairTermIsSymbol))(genericShowConstructor(genericShowArgsArgument(showArray(_Show_Term(dictShow))))(SetTermIsSymbol)))))))))(x);
+        return genericShow2(genericShowSum6(genericShowSum22(genericShowSum5(genericShowSum(genericShowConstructor(genericShowArgsProduct2(genericShowArgsArgument(_Show_Term(dictShow))))(ConTermIsSymbol))(genericShowSum(genericShowConstructor(genericShowArgsArgument(_Show_Term(dictShow)))(LeftTermIsSymbol))(genericShowSum(genericShowConstructor(genericShowArgsArgument(_Show_Term(dictShow)))(RightTermIsSymbol))(genericShowSum(genericShowConstructor(genericShowArgsProduct(genericShowArgsArgument(_Show_Term(dictShow)))(genericShowArgsArgument(_Show_Term(dictShow))))(PairTermIsSymbol))(genericShowConstructor(genericShowArgsArgument(showArray(_Show_Term(dictShow))))(SetTermIsSymbol)))))))))(x);
       }
     };
   };
@@ -8769,8 +8770,8 @@
           return new LiteralTerm(m.value0, m.value1);
         }
         ;
-        if (m instanceof ConstrTerm) {
-          return new ConstrTerm(m.value0, map(_Functor_TermF)(f)(m.value1));
+        if (m instanceof ConTerm) {
+          return new ConTerm(m.value0, map(_Functor_TermF)(f)(m.value1));
         }
         ;
         if (m instanceof LeftTerm) {
@@ -8809,7 +8810,7 @@
             return z;
           }
           ;
-          if (m instanceof ConstrTerm) {
+          if (m instanceof ConTerm) {
             return foldl(_Foldable_TermF)(f)(z)(m.value1);
           }
           ;
@@ -8848,7 +8849,7 @@
             return z;
           }
           ;
-          if (m instanceof ConstrTerm) {
+          if (m instanceof ConTerm) {
             return foldr(_Foldable_TermF)(f)(z)(m.value1);
           }
           ;
@@ -8890,7 +8891,7 @@
             return mempty3;
           }
           ;
-          if (m instanceof ConstrTerm) {
+          if (m instanceof ConTerm) {
             return foldMap(_Foldable_TermF)(dictMonoid)(f)(m.value1);
           }
           ;
@@ -8938,9 +8939,9 @@
             return pure24(new LiteralTerm(m.value0, m.value1));
           }
           ;
-          if (m instanceof ConstrTerm) {
+          if (m instanceof ConTerm) {
             return map33(function(v2) {
-              return new ConstrTerm(m.value0, v2);
+              return new ConTerm(m.value0, v2);
             })(traverse(_Traversable_TermF)(dictApplicative)(f)(m.value1));
           }
           ;
@@ -9022,27 +9023,27 @@
   var mapWithIndex3 = /* @__PURE__ */ mapWithIndex(functorWithIndexMap);
   var map22 = /* @__PURE__ */ map(functorMap);
   var section2 = /* @__PURE__ */ function() {
-    var $117 = div2([style2(append9(flex_column)(padding_horizontal_big))]);
-    return function($118) {
-      return pure6($117($118));
+    var $120 = div2([style2(append9(flex_column)(padding_horizontal_big))]);
+    return function($121) {
+      return pure6($120($121));
     };
   }();
   var render = function(dict) {
     return dict.render;
   };
   var line = /* @__PURE__ */ function() {
-    var $119 = div2([style2(append9(flex_row)(["gap: 0.8em", "display: inline-flex", "white-space: flex-wrap"]))]);
-    return function($120) {
-      return pure6($119($120));
+    var $122 = div2([style2(append9(flex_row)(["gap: 0.8em", "display: inline-flex", "white-space: flex-wrap"]))]);
+    return function($123) {
+      return pure6($122($123));
     };
   }();
   var doc_block = function(s) {
     return [div2([style2(append9(padding_small)(append9(font_prose)(["max-width: 30em", "background-color: rgba(0, 0, 0, 0.1)", "white-space: pre-wrap"])))])([text(s)])];
   };
   var divs = function(props) {
-    var $121 = div2(props);
-    return function($122) {
-      return $121(concat($122));
+    var $124 = div2(props);
+    return function($125) {
+      return $124(concat($125));
     };
   };
   var append_render = function(dictRender) {
@@ -9077,10 +9078,16 @@
   };
   var append_render4 = /* @__PURE__ */ append_render(_Render_Name);
   var render2 = /* @__PURE__ */ render(_Render_Name);
+  var _Render_Lit = {
+    render: function(v) {
+      return [div2([style2(append9(italic)(["color: #e67e00"]))])([text(v)])];
+    }
+  };
+  var append_render5 = /* @__PURE__ */ append_render(_Render_Lit);
   var _Render_Htmls = {
     render: /* @__PURE__ */ identity(categoryFn)
   };
-  var append_render5 = /* @__PURE__ */ append_render(_Render_Htmls);
+  var append_render6 = /* @__PURE__ */ append_render(_Render_Htmls);
   var _Render_LatticeType = {
     render: function(v) {
       if (v instanceof NamedLatticeType) {
@@ -9112,12 +9119,12 @@
           throw new Error("Failed pattern match at Foliage.App.Rendering (line 123, column 13 - line 127, column 55): " + [v.value0.constructor.name]);
         }();
         var plus_sup = span2([style2(["display: flex", "flex-direction: row"])])(append_render2("+")([sup([])([text(sup2)])]));
-        return append_render2("(")(append_render(_Render_LatticeType)(v.value1)(append_render5([plus_sup])(append_render2(")")([]))));
+        return append_render2("(")(append_render(_Render_LatticeType)(v.value1)(append_render6([plus_sup])(append_render2(")")([]))));
       }
       ;
       if (v instanceof ProductLatticeType) {
         var prod_sup = span2([style2(["display: flex", "flex-direction: row"])])(append_render2("\xD7")([sup([])([text("1,2")])]));
-        return append_render2("(")(append_render(_Render_LatticeType)(v.value1)(append_render5([prod_sup])(append_render(_Render_LatticeType)(v.value2)(append_render2(")")([])))));
+        return append_render2("(")(append_render(_Render_LatticeType)(v.value1)(append_render6([prod_sup])(append_render(_Render_LatticeType)(v.value2)(append_render2(")")([])))));
       }
       ;
       if (v instanceof SetLatticeType) {
@@ -9139,7 +9146,7 @@
       throw new Error("Failed pattern match at Foliage.App.Rendering (line 114, column 12 - line 139, column 70): " + [v.constructor.name]);
     }
   };
-  var append_render6 = /* @__PURE__ */ append_render(_Render_LatticeType);
+  var append_render7 = /* @__PURE__ */ append_render(_Render_LatticeType);
   var _Render_Term = {
     render: function(v) {
       if (v instanceof VarTerm) {
@@ -9147,10 +9154,10 @@
       }
       ;
       if (v instanceof LiteralTerm) {
-        return append_render1(v.value0)([]);
+        return append_render5(v.value0)([]);
       }
       ;
-      if (v instanceof ConstrTerm) {
+      if (v instanceof ConTerm) {
         return append_render2("(")(append_render3(v.value0)(append_render(_Render_Term)(v.value1)(append_render2(")")([]))));
       }
       ;
@@ -9171,30 +9178,30 @@
       }
       ;
       if (v instanceof SetTerm) {
-        return append_render2("{")(append_render5(intercalate4(append_render2(",")([]))(mapFlipped5(v.value0)(render(_Render_Term))))(append_render2("}")([])));
+        return append_render2("{")(append_render6(intercalate4(append_render2(",")([]))(mapFlipped5(v.value0)(render(_Render_Term))))(append_render2("}")([])));
       }
       ;
       throw new Error("Failed pattern match at Foliage.App.Rendering (line 180, column 12 - line 188, column 99): " + [v.constructor.name]);
     }
   };
-  var append_render7 = /* @__PURE__ */ append_render(_Render_Term);
+  var append_render8 = /* @__PURE__ */ append_render(_Render_Term);
   var render3 = /* @__PURE__ */ render(_Render_Term);
   var _Render_Prop = {
     render: function(v) {
-      return append_render4(v.value0)(append_render7(v.value1)([]));
+      return append_render4(v.value0)(append_render8(v.value1)([]));
     }
   };
-  var append_render8 = /* @__PURE__ */ append_render(_Render_Prop);
+  var append_render9 = /* @__PURE__ */ append_render(_Render_Prop);
   var _Render_SideHypothesis = {
     render: function(v) {
-      return append_render2("let")(append_render4(v.value0.resultVarName)(append_render2("=")(append_render4(v.value0.functionName)(append_render2("(")(append_render5(intercalate4(append_render2(",")([]))(mapFlipped5(v.value0.args)(render3)))(append_render2(")")([])))))));
+      return append_render2("let")(append_render4(v.value0.resultVarName)(append_render2("=")(append_render4(v.value0.functionName)(append_render2("(")(append_render6(intercalate4(append_render2(",")([]))(mapFlipped5(v.value0.args)(render3)))(append_render2(")")([])))))));
     }
   };
   var render4 = /* @__PURE__ */ render(_Render_SideHypothesis);
   var _Render_Hypothesis = {
     render: function(v) {
-      return append_render5(line(append_render8(v.value0)([])))(append_render5(fold3(map16(function($123) {
-        return line(render4($123));
+      return append_render6(line(append_render9(v.value0)([])))(append_render6(fold3(map16(function($126) {
+        return line(render4($126));
       })(v.value1)))([]));
     }
   };
@@ -9202,12 +9209,12 @@
   var _Render_Rule = {
     render: function(v) {
       return [div2([style2(flex_column)])(function() {
-        var $91 = $$null(v.value0.hypotheses);
-        if ($91) {
-          return line(append_render8(v.value0.conclusion)([]));
+        var $94 = $$null(v.value0.hypotheses);
+        if ($94) {
+          return line(append_render9(v.value0.conclusion)([]));
         }
         ;
-        return concat([fold13(map17(render5)(v.value0.hypotheses)), [div2([style2(horizontal_bar)])([])], line(append_render8(v.value0.conclusion)([]))]);
+        return concat([fold13(map17(render5)(v.value0.hypotheses)), [div2([style2(horizontal_bar)])([])], line(append_render9(v.value0.conclusion)([]))]);
       }())];
     }
   };
@@ -9217,11 +9224,11 @@
       return function(name17) {
         return function(body2) {
           return [divs([style2(append9(flex_column)(append9(padding_small)(boundaries)))])([maybe([])(function() {
-            var $124 = div2([]);
-            return function($125) {
-              return pure6($124($125));
+            var $127 = div2([]);
+            return function($128) {
+              return pure6($127($128));
             };
-          }())(mb_doc), line(append_render5(sort)(append_render5(name17)(append_render2("=")([])))), section2(body2)])];
+          }())(mb_doc), line(append_render6(sort)(append_render6(name17)(append_render2("=")([])))), section2(body2)])];
         };
       };
     };
@@ -9251,7 +9258,7 @@
       throw new Error("Failed pattern match at Foliage.App.Rendering (line 142, column 12 - line 147, column 71): " + [v.constructor.name]);
     }
   };
-  var append_render9 = /* @__PURE__ */ append_render(_Render_DataType);
+  var append_render10 = /* @__PURE__ */ append_render(_Render_DataType);
   var _Render_Module = {
     render: function(v) {
       return definition(mapFlipped12(v.value0.doc)(doc_block))(render1("module"))(render2(v.value0.name))(function() {
@@ -9268,7 +9275,7 @@
         };
         return concat([renderModDefinition(append_render2("data type")([]))(function(v1) {
           if (v1 instanceof DataTypeDef) {
-            return line(append_render9(v1.value0)([]));
+            return line(append_render10(v1.value0)([]));
           }
           ;
           if (v1 instanceof ExternalDataTypeDef) {
@@ -9277,12 +9284,12 @@
           ;
           throw new Error("Failed pattern match at Foliage.App.Rendering (line 73, column 63 - line 75, column 85): " + [v1.constructor.name]);
         })(v.value0.dataTypeDefs), renderModDefinition(append_render2("function")([]))(function(v1) {
-          return line(append_render1(v1.value0.name)(append_render2("(")(append_render5(intercalate4(append_render2(",")([]))(mapFlipped5(v1.value0.inputs)(function(v2) {
-            return append_render1(v2.value0)(append_render2(":")(append_render9(v2.value1)([])));
-          })))(append_render2(")")(append_render2("\u2192")(append_render9(v1.value0.output)([])))))));
+          return line(append_render1(v1.value0.name)(append_render2("(")(append_render6(intercalate4(append_render2(",")([]))(mapFlipped5(v1.value0.inputs)(function(v2) {
+            return append_render1(v2.value0)(append_render2(":")(append_render10(v2.value1)([])));
+          })))(append_render2(")")(append_render2("\u2192")(append_render10(v1.value0.output)([])))))));
         })(v.value0.functionDefs), renderModDefinition(append_render2("lattice type")([]))(function(v1) {
           if (v1 instanceof LatticeTypeDef) {
-            return line(append_render6(v1.value0)([]));
+            return line(append_render7(v1.value0)([]));
           }
           ;
           if (v1 instanceof ExternalLatticeTypeDef) {
@@ -9291,11 +9298,11 @@
           ;
           throw new Error("Failed pattern match at Foliage.App.Rendering (line 80, column 66 - line 82, column 93): " + [v1.constructor.name]);
         })(v.value0.latticeTypeDefs), renderModDefinition(append_render2("relation")([]))(function(v1) {
-          return line(append_render2("\u211B")(append_render6(v1.value0.domain)([])));
+          return line(append_render2("\u211B")(append_render7(v1.value0.domain)([])));
         })(v.value0.relations), renderModDefinition(append_render2("rule")([]))(function() {
-          var $126 = div2([style2(["display: inline-flex", "flex-direction: row"])]);
-          return function($127) {
-            return pure6($126(render6($127)));
+          var $129 = div2([style2(["display: inline-flex", "flex-direction: row"])]);
+          return function($130) {
+            return pure6($129(render6($130)));
           };
         }())(v.value0.rules)]);
       }());
@@ -9311,7 +9318,7 @@
   // output/Foliage.Example.Blank/index.js
   var blank = /* @__PURE__ */ defer2(function(v) {
     return new Program({
-      name: "Main",
+      name: "Blank",
       doc: Nothing.value,
       modules: singleton6(mainModuleName)(new Module({
         name: mainModuleName,
@@ -9697,11 +9704,11 @@
     return ProductLatticeType.create(FirstThenSecond_ProductLatticeTypeOrdering.value);
   }();
   var from_StringList = function(v) {
-    if (v instanceof ConstrTerm && (v.value0 === "cons" && (v.value1 instanceof PairTerm && (v.value1.value0 instanceof LiteralTerm && (v.value1.value0.value1 instanceof NamedDataType && v.value1.value0.value1.value0 === "String"))))) {
+    if (v instanceof ConTerm && (v.value0 === "cons" && (v.value1 instanceof PairTerm && (v.value1.value0 instanceof LiteralTerm && (v.value1.value0.value1 instanceof NamedDataType && v.value1.value0.value1.value0 === "String"))))) {
       return map110(Cons.create(v.value1.value0.value0))(from_StringList(v.value1.value1));
     }
     ;
-    if (v instanceof ConstrTerm && (v.value0 === "nil" && v.value1 instanceof UnitTerm)) {
+    if (v instanceof ConTerm && (v.value0 === "nil" && v.value1 instanceof UnitTerm)) {
       return pure8(mempty2);
     }
     ;
@@ -9749,9 +9756,9 @@
                 functionName: name4.joinStrings,
                 args: [foldr2(function(h) {
                   return function(t) {
-                    return new ConstrTerm("cons", pair(h)(t));
+                    return new ConTerm("cons", pair(h)(t));
                   };
-                })(new ConstrTerm("nil", UnitTerm.value))(mapWithIndex2(function(k) {
+                })(new ConTerm("nil", UnitTerm.value))(mapWithIndex2(function(k) {
                   return function(v3) {
                     return make_str_var(k);
                   };
@@ -9812,7 +9819,7 @@
         return defer2(function(v2) {
           return new Program({
             name: "Parsing . " + label5,
-            doc: new Just(intercalate6("\n")(concat([["This program implements are parser for the following context-free grammar:", ""], mapFlipped7(v.value0)(function(v3) {
+            doc: new Just(intercalate6("\n")(concat([["This program implements a parser for the following context-free grammar:", ""], mapFlipped7(v.value0)(function(v3) {
               return "    " + (v3.value0 + (" \u2192 " + intercalate6("")(v3.value1)));
             }), ["", "The input string is: ", "", "    " + intercalate6("")(v1.value0), ""]]))),
             modules: singleton6(mainModuleName)(new Module({
@@ -11041,7 +11048,7 @@
               var failure = function(exc) {
                 return tellLog2({
                   label: "learn prop . failure",
-                  messages: [new Tuple("exception", div2([])(pure11(text(show62(exc)))))]
+                  messages: [new Tuple("reason", div2([])(pure11(text(show62(exc)))))]
                 });
               };
               return maybe(success(empty3))(function(known_props) {
@@ -11498,7 +11505,7 @@
     };
     return ConsoleOutput2;
   }();
-  var default_program = nat;
+  var default_program = void 0;
   var _viewer = /* @__PURE__ */ function() {
     return $$Proxy.value;
   }();
@@ -11558,10 +11565,10 @@
                     }))));
                   }
                   ;
-                  throw new Error("Failed pattern match at Foliage.App.Component (line 69, column 17 - line 71, column 138): " + [v1.value0.value0.constructor.name]);
+                  throw new Error("Failed pattern match at Foliage.App.Component (line 70, column 17 - line 72, column 138): " + [v1.value0.value0.constructor.name]);
                 }
                 ;
-                throw new Error("Failed pattern match at Foliage.App.Component (line 64, column 15 - line 71, column 138): " + [v1.constructor.name]);
+                throw new Error("Failed pattern match at Foliage.App.Component (line 65, column 15 - line 72, column 138): " + [v1.constructor.name]);
               }))(function() {
                 return pure15(unit);
               });
@@ -11583,10 +11590,10 @@
           });
         }
         ;
-        throw new Error("Failed pattern match at Foliage.App.Component (line 73, column 29 - line 79, column 18): " + [v.value0.constructor.name]);
+        throw new Error("Failed pattern match at Foliage.App.Component (line 74, column 29 - line 80, column 18): " + [v.value0.constructor.name]);
       }
       ;
-      throw new Error("Failed pattern match at Foliage.App.Component (line 44, column 18 - line 79, column 18): " + [v.constructor.name]);
+      throw new Error("Failed pattern match at Foliage.App.Component (line 45, column 18 - line 80, column 18): " + [v.constructor.name]);
     };
     var $$eval = mkEval({
       handleQuery: defaultEval.handleQuery,

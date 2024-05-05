@@ -1,78 +1,82 @@
 module Foliage.Example.Typing where
 
-import Data.Either.Nested
-import Data.Tuple.Nested
-import Foliage.Program
 import Prelude
-import Control.Monad.Error.Class (throwError)
+import Foliage.Program
+import Data.Tuple.Nested (type (/\), (/\))
 import Control.Monad.Except (ExceptT)
 import Control.Plus (empty)
-import Data.Array as Array
-import Data.Either (Either(..), either)
+import Data.Either (Either)
 import Data.Homogeneous.Record (Homogeneous, fromHomogeneous, homogeneous)
 import Data.Identity (Identity)
-import Data.Int as Int
 import Data.Lazy (Lazy)
 import Data.Lazy as Lazy
-import Data.List (List(..))
 import Data.List as List
 import Data.Map (Map)
 import Data.Map as Map
-import Data.Maybe (Maybe(..), maybe)
-import Data.String as String
-import Data.String.CodeUnits (toCharArray)
-import Data.String.CodeUnits as String.CodeUnits
-import Foliage.Common (Exc(..), Opaque(..), _error)
-import Prelude as Prelude
+import Data.Maybe (Maybe(..))
+import Foliage.Common (Exc, Opaque(..))
+import Foliage.Example.Library (pair, prod12, sumLIR)
+import Foliage.Example.Library as Library
+import Record as Record
 import Type.Proxy (Proxy(..))
-import Unsafe (todo)
-import Unsafe as Unsafe
 
 --------------------------------------------------------------------------------
 -- Examples
 --------------------------------------------------------------------------------
--- TODO: examples
+test :: Lazy Program
+test = make_typing "Test"
+
 --------------------------------------------------------------------------------
 -- Definitions
 --------------------------------------------------------------------------------
-name :: Record _
+name ::
+  Record
+    ( "" :: Name
+    , "Context" :: Name
+    , "Index" :: Name
+    , "Int" :: Name
+    , "List String" :: Name
+    , "Parsed" :: Name
+    , "String" :: Name
+    , "Symbol" :: Name
+    , "Term" :: Name
+    , "Type" :: Name
+    , "Typed" :: Name
+    , "Typed Var" :: Name
+    , "Var" :: Name
+    , joinStrings :: Name
+    )
 name =
-  { "Int": "Int"
-  , "Index": "Index"
-  , "Symbol": "Symbol"
+  { "": ""
+  -- external types 
+  -- types
+  , "Var": "Var"
+  , "Term": "Term"
+  , "Type": "Type"
+  , "Context": "Context"
+  -- relations
   , "Typed": "Typed"
-  , "String": "String"
+  , "Typed Var": "Typed Var"
+  , "Parsed": "Parsed"
   }
     # homogeneous
     # map Name
     # fromHomogeneous
+    # Record.merge Library.name
 
 function :: Record _
 function =
   ( {}
       # homogeneous
       # map (Opaque (Proxy :: Proxy "function")) ::
-      Homogeneous _ (Opaque "function" (Map String Term -> Either String Term))
+      Homogeneous _
+        (Opaque "function" (Map String Term -> Either String Term))
   )
     # fromHomogeneous
 
 compare :: Record _
 compare =
-  { "Int":
-      case _ of
-        LiteralTerm s1 (NamedDataType n1) /\ LiteralTerm s2 (NamedDataType n2)
-          | n1 == name."Int" && n2 == name."Int" -> do
-            x1 <- s1 # Int.fromString # maybe (throwError (Exc { label: _error, source: "compare.Int", description: show s1 <> " is not an Int" })) pure
-            x2 <- s2 # Int.fromString # maybe (throwError (Exc { label: _error, source: "compare.Int", description: show s2 <> " is not an Int" })) pure
-            pure (Prelude.compare x1 x2 /\ empty)
-        t1 /\ t2 -> throwError (Exc { label: _error, source: "compare.Int", description: "inputs are not literal Ints: " <> show t1 <> ", " <> show t2 })
-  , "String":
-      case _ of
-        LiteralTerm s1 (NamedDataType n1) /\ LiteralTerm s2 (NamedDataType n2)
-          | n1 == name."String" && n2 == name."String" -> do
-            pure (Prelude.compare s1 s2 /\ empty)
-        t1 /\ t2 -> throwError (Exc { label: _error, source: "compare.String", description: "inputs are not literal Strings: " <> show t1 <> ", " <> show t2 })
-  }
+  {}
     # ( homogeneous ::
           Record _ ->
           Homogeneous _
@@ -83,29 +87,245 @@ compare =
     # map (Opaque (Proxy :: Proxy "compare"))
     # fromHomogeneous
 
+dtyString :: DataType
+dtyString = NamedDataType name."String"
+
+ltyString :: LatticeType
+ltyString = NamedLatticeType name."String"
+
+dtyIndex :: DataType
+dtyIndex = NamedDataType name."Index"
+
+ltyIndex :: LatticeType
+ltyIndex = NamedLatticeType name."Index"
+
+ltySymbol :: LatticeType
+ltySymbol = NamedLatticeType name."Symbol"
+
+ltyType :: LatticeType
+ltyType = NamedLatticeType name."Type"
+
+ltyTerm :: LatticeType
+ltyTerm = NamedLatticeType name."Term"
+
+ltyContext :: LatticeType
+ltyContext = NamedLatticeType name."Context"
+
+ltyVar :: LatticeType
+ltyVar = NamedLatticeType name."Var"
+
 --------------------------------------------------------------------------------
 -- Program
 --------------------------------------------------------------------------------
-make_typing :: Lazy Program
-make_typing =
+make_typing :: String -> Lazy Program
+make_typing label =
   Lazy.defer \_ ->
-    todo ""
+    Program
+      { name: Name ("Typing . " <> label)
+      , doc: Nothing
+      , modules:
+          Map.singleton mainModuleName
+            ( Module
+                { name: mainModuleName
+                , doc: Nothing
+                , initialGas: 20
+                , dataTypeDefs:
+                    []
+                      # Map.fromFoldable
+                      # Map.union Library.dataTypeDefs
+                , latticeTypeDefs:
+                    [ name."Type"
+                        /\ LatticeTypeDef
+                            ( (ltySymbol {- arrow -} `prod12` (ltyType `prod12` ltyType))
+                                `sumLIR`
+                                  (ltySymbol {- unit -})
+                            )
+                    , name."Term"
+                        /\ LatticeTypeDef
+                            ( (ltySymbol {- lam -} `prod12` (ltyVar `prod12` ltyTerm))
+                                `sumLIR`
+                                  (ltySymbol {- var -} `prod12` ltyVar)
+                            )
+                    , name."Context"
+                        /\ LatticeTypeDef
+                            ( ltySymbol {- extend -} `prod12` (ltyVar `prod12` ltyType `prod12` ltyContext)
+                                `sumLIR`
+                                  ltySymbol {- empty -}
+                            )
+                    ]
+                      # Map.fromFoldable
+                      # Map.union Library.latticeTypeDefs
+                , relations:
+                    [ name."Parsed"
+                        /\ Relation
+                            -- Parsed (Term * (Index * Index))
+                            { domain:
+                                ltyTerm
+                                  `prod12`
+                                    (ltyIndex `prod12` ltyIndex)
+                            }
+                    , name."Typed"
+                        /\ Relation
+                            -- Typed ((Term * (Index * Index)) * (Context * Type))
+                            { domain:
+                                ( (ltyTerm)
+                                    `prod12`
+                                      (ltyIndex `prod12` ltyIndex)
+                                )
+                                  `prod12`
+                                    (ltyContext `prod12` ltyType)
+                            }
+                    , name."Typed Var"
+                        -- Typed Var (Term * (Context * Type))
+                        
+                        /\ Relation
+                            { domain:
+                                ltyTerm
+                                  `prod12`
+                                    ( ltyContext
+                                        `prod12`
+                                          ltyType
+                                    )
+                            }
+                    ]
+                      # Map.fromFoldable
+                      # Map.union Library.relations
+                , functionDefs:
+                    []
+                      # Map.fromFoldable
+                      # Map.union Library.functionDefs
+                , rules:
+                    [ let
+                        ctx = Name "ctx"
 
-lex :: LatticeType -> LatticeType -> LatticeType
-lex = ProductLatticeType FirstThenSecond_ProductLatticeTypeOrdering
+                        x = Name "x"
 
-pair :: Term -> Term -> Term
-pair = PairTerm
+                        α = Name "α"
 
-typed :: String -> Term -> Term -> Term -> Prop
-typed sym str i j =
-  Prop name."Typed"
-    ( (LiteralTerm sym (NamedDataType name."String") `pair` str)
-        `pair`
-          (i `pair` j)
-    )
+                        β = Name "β"
+
+                        b = Name "b"
+
+                        i0 = Name "i0"
+
+                        i1 = Name "i1"
+
+                        i2 = Name "i2"
+
+                        i3 = Name "i3"
+                      in
+                        Name "lam"
+                          /\ Rule
+                              { hypotheses:
+                                  [ Hypothesis
+                                      -- lam x α β | i0 -> i3
+                                      (parsed (lamTerm (VarTerm x) (VarTerm b)) (VarTerm i0) (VarTerm i3))
+                                      []
+                                  , Hypothesis
+                                      -- x : α , Γ ⊢ b : β | i1 -> i2
+                                      (typed (VarTerm b) (VarTerm i1) (VarTerm i2) (extendContext (VarTerm x) (VarTerm α) (VarTerm ctx)) (VarTerm β))
+                                      []
+                                  ]
+                                    # List.fromFoldable
+                              , conclusion:
+                                  -- Γ ⊢ lam x α b : a -> b | i0 -> i3
+                                  typed (lamTerm (VarTerm x) (VarTerm b)) (VarTerm i0) (VarTerm i3) (VarTerm ctx) (arrowType (VarTerm α) (VarTerm β))
+                              }
+                    , Name "var"
+                        /\ let
+                            x = Name "x"
+
+                            i0 = Name "i0"
+
+                            i1 = Name "i1"
+
+                            ctx = Name "ctx"
+
+                            α = Name "α"
+                          in
+                            Rule
+                              { hypotheses:
+                                  -- Γ ⊢ x : α
+                                  [ Hypothesis (parsed (VarTerm x) (VarTerm i0) (VarTerm i1)) []
+                                  , Hypothesis (typedVar (VarTerm x) (VarTerm ctx) (VarTerm α)) []
+                                  ]
+                                    # List.fromFoldable
+                              , conclusion:
+                                  -- Γ ⊢ x : α [i0 -> i1]
+                                  typed (varTerm (VarTerm x)) (VarTerm i0) (VarTerm i1) (VarTerm ctx) (VarTerm α)
+                              }
+                    , Name "var in context right here"
+                        /\ let
+                            x = Name "x"
+
+                            α = Name "α"
+
+                            ctx = Name "ctx"
+                          in
+                            Rule
+                              { hypotheses: [] # List.fromFoldable
+                              , conclusion: typedVar (VarTerm x) (extendContext (VarTerm x) (VarTerm α) (VarTerm ctx)) (VarTerm α)
+                              }
+                    , Name "var in context somewhere else"
+                        /\ let
+                            x = Name "x"
+
+                            α = Name "α"
+
+                            β = Name "β"
+
+                            ctx = Name "ctx"
+                          in
+                            Rule
+                              { hypotheses:
+                                  [ Hypothesis (typedVar (VarTerm x) (VarTerm ctx) (VarTerm α)) [] ]
+                                    # List.fromFoldable
+                              , conclusion: typedVar (VarTerm x) (extendContext (VarTerm x) (VarTerm β) (VarTerm ctx)) (VarTerm α)
+                              }
+                    -- input parsed term 
+                    , Name "lam | 1 -> 4" /\ Rule { hypotheses: empty, conclusion: parsed (lamTerm (LiteralTerm "x" (dtyString)) (varTerm (LiteralTerm "x" (dtyString)))) (LiteralTerm (show 1) (dtyString)) (LiteralTerm (show 4) (dtyString)) }
+                    , Name "x | 1 -> 2" /\ Rule { hypotheses: empty, conclusion: parsed (varTerm (LiteralTerm "x" (dtyString))) (LiteralTerm (show 1) (dtyString)) (LiteralTerm (show 2) (dtyString)) }
+                    , Name "x | 2 -> 3" /\ Rule { hypotheses: empty, conclusion: parsed (varTerm (LiteralTerm "x" (dtyString))) (LiteralTerm (show 2) (dtyString)) (LiteralTerm (show 3) (dtyString)) }
+                    ]
+                      # Map.fromFoldable
+                      # Map.union Library.rules
+                }
+            )
+      }
+
+lamTerm :: Term -> Term -> Term
+lamTerm x b = LeftTerm ((LiteralTerm "lam" (dtyString)) `pair` (x `pair` b))
+
+varTerm :: Term -> Term
+varTerm x = RightTerm ((LiteralTerm "var" (dtyString)) `pair` x)
+
+arrowType :: Term -> Term -> Term
+arrowType α β = LeftTerm ((LiteralTerm "arrow" (dtyString)) `pair` (α `pair` β))
+
+unitType :: forall x110. TermF x110
+unitType = RightTerm ((LiteralTerm "unit" (dtyString)))
+
+extendContext :: Term -> Term -> Term -> Term
+extendContext x α ctx = LeftTerm ((LiteralTerm "extend" (dtyString) `pair` ((x `pair` α) `pair` ctx)))
+
+emptyContext :: Term
+emptyContext = RightTerm (LiteralTerm "empty" (dtyString))
+
+parsed :: Term -> Term -> Term -> Prop
+parsed tm i j = Prop name."Parsed" (tm `pair` (i `pair` j))
+
+typed :: Term -> Term -> Term -> Term -> Term -> Prop
+typed tm i j ctx ty = Prop name."Typed" ((tm `pair` (i `pair` j)) `pair` (ctx `pair` ty))
+
+typedVar :: Term -> Term -> Term -> Prop
+typedVar x ctx ty = Prop name."Typed Var" (x `pair` (ctx `pair` ty))
 
 --------------------------------------------------------------------------------
 -- Intermediate typing rules representation
 --------------------------------------------------------------------------------
-data Lang = Lang  (Array (String /\ Array (String)))
+data Lang
+  = Lang (Array (String /\ Array LangRuleHyp))
+
+data LangRuleHyp
+  = TypeVar String
+  | TypeConst String

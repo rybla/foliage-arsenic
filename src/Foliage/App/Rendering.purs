@@ -179,8 +179,8 @@ instance _Render_Prop :: Render Prop where
 instance _Render_Term :: Render Term where
   render = case _ of
     VarTerm x -> x ⊕ []
-    LiteralTerm l _ -> Raw l ⊕ []
-    ConstrTerm c t -> Punc "(" ⊕ Prim c ⊕ t ⊕ Punc ")" ⊕ []
+    LiteralTerm l _ -> Lit l ⊕ []
+    ConTerm c t -> Punc "(" ⊕ Prim c ⊕ t ⊕ Punc ")" ⊕ []
     UnitTerm -> Prim "●" ⊕ []
     LeftTerm t -> Punc "(" ⊕ Prim "Left" ⊕ t ⊕ Punc ")" ⊕ []
     RightTerm t -> Punc "(" ⊕ Prim "Right" ⊕ t ⊕ Punc ")" ⊕ []
@@ -196,3 +196,10 @@ newtype Raw
 
 instance _Render_Raw :: Render Raw where
   render (Raw s) = [ HH.div [ Style.style $ [ "color: blue" ] ] [ HH.text s ] ]
+
+-- | Lit String
+newtype Lit
+  = Lit String
+
+instance _Render_Lit :: Render Lit where
+  render (Lit s) = [ HH.div [ Style.style $ Style.italic <> [ "color: #e67e00" ] ] [ HH.text s ] ]

@@ -280,7 +280,7 @@ data TermF x
   = VarTerm x
   | UnitTerm
   | LiteralTerm String DataType
-  | ConstrTerm String (TermF x)
+  | ConTerm String (TermF x)
   | LeftTerm (TermF x)
   | RightTerm (TermF x)
   | PairTerm (TermF x) (TermF x)
@@ -322,7 +322,7 @@ substTerm sigma (VarTerm x) = Map.lookup x sigma # fromMaybe (VarTerm x)
 
 substTerm _sigma (LiteralTerm s dty) = LiteralTerm s dty
 
-substTerm sigma (ConstrTerm s t) = ConstrTerm s (substTerm sigma t)
+substTerm sigma (ConTerm s t) = ConTerm s (substTerm sigma t)
 
 substTerm _sigma UnitTerm = UnitTerm
 

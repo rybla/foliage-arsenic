@@ -156,7 +156,7 @@ learnProp prop@(Prop prop_name _) = do
   Env env <- get
   let
     failure exc = do
-      tellLog { label: "learn prop . failure", messages: [ "exception" /\ (exc # show # HH.text # pure # HH.div []) ] }
+      tellLog { label: "learn prop . failure", messages: [ "reason" /\ (exc # show # HH.text # pure # HH.div []) ] }
 
     success known_props' = do
       tellLog { label: "learn prop . success", messages: [ "prop" /\ (prop # render # line # HH.div []) ] }

@@ -1,7 +1,6 @@
 module Foliage.App.Component where
 
 import Prelude
-
 import Control.Monad.Except (runExceptT)
 import Control.Monad.Trans.Class (lift)
 import Control.Monad.Writer (runWriterT)
@@ -19,6 +18,7 @@ import Foliage.App.Style as Style
 import Foliage.App.Viewer.Component as Viewer.Component
 import Foliage.Example.Dijkstra as Example.Dijkstra
 import Foliage.Example.Parsing as Example.Parsing
+import Foliage.Example.Typing as Example.Typing
 import Foliage.Interpretation as Interpretation
 import Halogen (Component, defaultEval, mkComponent, mkEval)
 import Halogen as H
@@ -27,7 +27,8 @@ import Type.Proxy (Proxy(..))
 import Unsafe as Unsafe
 
 -- default_program = Example.Dijkstra.diamond
-default_program = Example.Parsing.nat
+-- default_program = Example.Parsing.nat
+default_program = Example.Typing.test
 
 data Action
   = EditorOutput Editor.Component.Output

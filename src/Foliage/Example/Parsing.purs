@@ -2,6 +2,7 @@ module Foliage.Example.Parsing where
 
 import Foliage.Program
 import Prelude
+
 import Control.Monad.Error.Class (throwError)
 import Control.Monad.Except (ExceptT)
 import Control.Plus (empty)
@@ -21,6 +22,7 @@ import Data.String as String
 import Data.String.CodeUnits as String.CodeUnits
 import Data.Tuple.Nested (type (/\), (/\))
 import Foliage.Common (Exc(..), Opaque(..), _error)
+import Foliage.Example.Library as Library
 import Prelude as Prelude
 import Type.Proxy (Proxy(..))
 import Unsafe as Unsafe
@@ -119,8 +121,8 @@ name =
 
 from_StringList :: Term -> Either String (List String)
 from_StringList = case _ of
-  ConstrTerm "cons" (PairTerm (LiteralTerm s (NamedDataType (Name "String"))) t) -> Cons s <$> from_StringList t
-  ConstrTerm "nil" UnitTerm -> pure mempty
+  ConTerm "cons" (PairTerm (LiteralTerm s (NamedDataType (Name "String"))) t) -> Cons s <$> from_StringList t
+  ConTerm "nil" UnitTerm -> pure mempty
   _ -> throwError "invalid"
 
 function ::
@@ -185,7 +187,7 @@ make_parsing label grammar@(Grammar grammar_rules) input@(Input input_string) =
     Program
       { name: Name ("Parsing . " <> label)
       , doc:
-          [ [ "This program implements are parser for the following context-free grammar:"
+          [ [ "This program implements a parser for the following context-free grammar:"
             , ""
             ]
           , grammar_rules <#> \(s /\ ss) -> "    " <> s <> " → " <> (ss # Array.intercalate "")
@@ -289,7 +291,7 @@ compileGrammar (Grammar prods) =
                                             # (Array.mapWithIndex \k _ -> make_str_var k)
                                             -- # (\ts -> [ LiteralTerm "⟬" (NamedDataType name."String") ] <> ts <> [ LiteralTerm "⟭" (NamedDataType name."String") ])
                                             
-                                            # Array.foldr (\h t -> ConstrTerm "cons" (h `pair` t)) (ConstrTerm "nil" UnitTerm)
+                                            # Array.foldr (\h t -> ConTerm "cons" (h `pair` t)) (ConTerm "nil" UnitTerm)
                                         ]
                                     }
                                 ]
