@@ -21,9 +21,11 @@ import Data.String as String
 import Data.String.CodeUnits as CodeUnits
 import Data.String.CodeUnits as String.CodeUnits
 import Data.Tuple.Nested (type (/\), (/\))
-import Foliage.Common (Exc(..), Opaque(..), _error)
-import Foliage.Example.Library (left, pair, prod12, right, sumLIR)
+import Foliage.Common (Exc(..), Htmls, Opaque(..), Html, _error)
+import Foliage.Example.Library (left, ltyUnit, pair, prod12, right, sumLIR, termUnit)
 import Foliage.Example.Library as Library
+import Halogen.HTML as HH
+import Partial.Unsafe (unsafeCrashWith)
 import Prelude as Prelude
 import Type.Proxy (Proxy(..))
 import Unsafe (todo)
@@ -36,129 +38,129 @@ nat :: Lazy Program
 nat =
   Lazy.defer \_ ->
     let
+      input :: Array String
       input = [ "S", "S", "Z" ]
-    in
-      Program
-        { name: FixedName ("Parsing . Nat")
-        , doc:
-            [ [ "This program implements a parser for the following context-free grammar:"
-              , ""
-              , ""
-              , "The input string is: "
-              , ""
-              , "    " <> (input # Array.intercalate "")
-              , ""
-              ]
-            ]
-              # Array.concat
-              # Array.intercalate "\n"
-              # Just
-        , modules:
-            Map.singleton mainModuleName
-              ( Module
-                  { name: mainModuleName
-                  , doc: Nothing
-                  , initialGas: 40
-                  , dataTypeDefs:
-                      [ name."Int" /\ ExternalDataTypeDef "Int"
-                      , name."String" /\ ExternalDataTypeDef "String"
-                      ]
-                        # Map.fromFoldable
-                  , latticeTypeDefs:
-                      [ name."Int" /\ ExternalLatticeTypeDef { name: "Int", compare_impl: compare."Int" }
-                      , name."String" /\ ExternalLatticeTypeDef { name: "String", compare_impl: compare."String" }
-                      , name."Index" /\ LatticeTypeDef (DiscreteLatticeType ltyInt)
-                      , name."Symbol" /\ LatticeTypeDef (DiscreteLatticeType ltyString)
-                      , name."Ast"
-                          /\ LatticeTypeDef
-                              ( (ltySymbol `prod12` ltyAst) -- S N
-                                  `sumLIR`
-                                    ltySymbol -- Z
-                              )
-                      ]
-                        # Map.fromFoldable
-                  , functionDefs:
-                      []
-                        # Map.fromFoldable
-                  , relations:
-                      [ name."Token" /\ Relation { domain: ltySymbol `prod12` (ltyIndex `prod12` ltyIndex) }
-                      , name."Parse" /\ Relation { domain: ltyAst `prod12` (ltyIndex `prod12` ltyIndex) }
-                      ]
-                        # Map.fromFoldable
-                  , rules:
-                      [ [ let
-                            i0 = newVarName "i0"
 
-                            i1 = newVarName "i1"
-                          in
-                            FixedName "Z"
-                              /\ Rule
-                                  { hypotheses:
-                                      [ Hypothesis (token (LiteralTerm "Z" dtyString) (VarTerm i0) (VarTerm i1)) []
-                                      ]
-                                        # List.fromFoldable
-                                  , conclusion:
-                                      parse (right (LiteralTerm "Z" dtyString)) (VarTerm i0) (VarTerm i1)
-                                  }
-                        , let
-                            n = newVarName "n"
+      parse :: Term -> Term -> Term -> Prop
+      parse ast i j = Prop name."Parse" (ast `pair` (i `pair` j))
 
-                            i0 = newVarName "i0"
+      latticeTypeDefs =
+        [ name."Ast" /\ LatticeTypeDef (ltyAst `sumLIR` ltyUnit)
+        ]
 
-                            i1 = newVarName "i1"
+      renderAst :: Term -> RenderM Htmls
+      renderAst = case _ of
+        LeftTerm s -> [ HH.text "S" :: Html ] ⊕ renderAst s ⊕ mempty
+        RightTerm _z -> [ HH.text "Z" :: Html ] ⊕ mempty
+        t -> render t
 
-                            i2 = newVarName "i2"
-                          in
-                            FixedName "S"
-                              /\ Rule
-                                  { hypotheses:
-                                      [ Hypothesis (token (LiteralTerm "S" dtyString) (VarTerm i0) (VarTerm i1)) []
-                                      , Hypothesis (parse (VarTerm n) (VarTerm i1) (VarTerm i2)) []
-                                      ]
-                                        # List.fromFoldable
-                                  , conclusion:
-                                      parse (left (LiteralTerm "S" dtyString `pair` VarTerm n)) (VarTerm i0) (VarTerm i2)
-                                  }
-                        ]
-                      , compileInput input
+      rules =
+        [ let
+            i0 = newVarName "i0"
+
+            i1 = newVarName "i1"
+          in
+            FixedName "Z"
+              /\ Rule
+                  { hypotheses:
+                      [ Hypothesis (token (LiteralTerm "Z" dtyString) (VarTerm i0) (VarTerm i1)) []
                       ]
-                        # Array.concat
-                        # Map.fromFoldable
+                        # List.fromFoldable
+                  , conclusion:
+                      parse (right termUnit) (VarTerm i0) (VarTerm i1)
                   }
-              )
-        }
-  where
-  compileInput :: Array String -> Array (FixedName /\ Rule)
-  compileInput ss =
-    ss
-      # Array.mapWithIndex \i s ->
-          (FixedName (s <> "#" <> show i))
-            /\ Rule
-                { hypotheses: mempty
-                , conclusion: token (LiteralTerm s (NamedDataType name."String")) (LiteralTerm (show i) (NamedDataType name."Int")) (LiteralTerm (show (i + 1)) (NamedDataType name."Int"))
-                }
+        , let
+            n = newVarName "n"
 
-  token :: Term -> Term -> Term -> Prop
-  token str i j = Prop name."Token" (str `pair` (i `pair` j))
+            i0 = newVarName "i0"
 
-  parse :: Term -> Term -> Term -> Prop
-  parse ast i j = Prop name."Parse" (ast `pair` (i `pair` j))
+            i1 = newVarName "i1"
+
+            i2 = newVarName "i2"
+          in
+            FixedName "S"
+              /\ Rule
+                  { hypotheses:
+                      [ Hypothesis (token (LiteralTerm "S" dtyString) (VarTerm i0) (VarTerm i1)) []
+                      , Hypothesis (parse (VarTerm n) (VarTerm i1) (VarTerm i2)) []
+                      ]
+                        # List.fromFoldable
+                  , conclusion:
+                      parse (left (VarTerm n)) (VarTerm i0) (VarTerm i2)
+                  }
+        ]
+    in
+      make_example { input, latticeTypeDefs, renderAst, rules }
+
+make_example ::
+  forall a.
+  Render a =>
+  { input :: Array String
+  , latticeTypeDefs :: Array (FixedName /\ LatticeTypeDef)
+  , renderAst :: Term -> a
+  , rules :: Array (FixedName /\ Rule)
+  } ->
+  Program
+make_example spec =
+  Program
+    { name: FixedName ("Parsing . Nat")
+    , doc:
+        [ [ "This program implements a parser for the following context-free grammar:"
+          , ""
+          , "  N → Z"
+          , "  N → SN"
+          , ""
+          , "The input string is: "
+          , ""
+          , "    " <> (spec.input # Array.intercalate "")
+          , ""
+          ]
+        ]
+          # Array.concat
+          # Array.intercalate "\n"
+          # Just
+    , modules:
+        Map.singleton mainModuleName
+          ( Module
+              { name: mainModuleName
+              , doc: Nothing
+              , initialGas: 40
+              , dataTypeDefs:
+                  [ dataTypeDef_Int
+                  , dataTypeDef_String
+                  ]
+                    # Map.fromFoldable
+              , latticeTypeDefs:
+                  [ [ latticeTypeDef_Int
+                    , latticeTypeDef_String
+                    , latticeTypeDef_Symbol
+                    , latticeTypeDef_Index
+                    ]
+                  , spec.latticeTypeDefs
+                  ]
+                    # Array.concat
+                    # Map.fromFoldable
+              , functionDefs:
+                  []
+                    # Map.fromFoldable
+              , relations:
+                  [ relation_Token
+                  , relation_Parse spec.renderAst
+                  ]
+                    # Map.fromFoldable
+              , rules:
+                  [ compileInput spec.input
+                  , spec.rules
+                  ]
+                    # Array.concat
+                    # Map.fromFoldable
+              }
+          )
+    }
 
 --------------------------------------------------------------------------------
 -- Definitions
 --------------------------------------------------------------------------------
-ltyInt = NamedLatticeType name."Int"
-
-ltyString = NamedLatticeType name."String"
-
-ltySymbol = NamedLatticeType name."Symbol"
-
-ltyIndex = NamedLatticeType name."Index"
-
-ltyAst = NamedLatticeType name."Ast"
-
-dtyString = NamedDataType name."String"
-
 name :: Record _
 name =
   { "Int": "Int"
@@ -173,11 +175,6 @@ name =
     # map FixedName
     # fromHomogeneous
 
--- from_StringList :: Term -> Either String (List String)
--- from_StringList = case _ of
---   ConTerm "cons" (PairTerm (LiteralTerm s (NamedDataType (VarName "String" _))) t) -> Cons s <$> from_StringList t
---   ConTerm "nil" UnitTerm -> pure mempty
---   _ -> throwError "invalid"
 function ::
   Record
     ( joinStrings :: Opaque "function" (Map String (TermF VarName) -> Either String (TermF VarName))
@@ -230,6 +227,71 @@ compare =
       )
     # map (Opaque (Proxy :: Proxy "compare"))
     # fromHomogeneous
+
+ltyInt = NamedLatticeType name."Int"
+
+ltyString = NamedLatticeType name."String"
+
+ltySymbol = NamedLatticeType name."Symbol"
+
+ltyIndex = NamedLatticeType name."Index"
+
+ltyAst = NamedLatticeType name."Ast"
+
+dtyString = NamedDataType name."String"
+
+dataTypeDef_Int = name."Int" /\ ExternalDataTypeDef "Int"
+
+latticeTypeDef_Int = name."Int" /\ ExternalLatticeTypeDef { name: "Int", compare_impl: compare."Int" }
+
+dataTypeDef_String = name."String" /\ ExternalDataTypeDef "String"
+
+latticeTypeDef_String = name."String" /\ ExternalLatticeTypeDef { name: "String", compare_impl: compare."String" }
+
+latticeTypeDef_Index = name."Index" /\ LatticeTypeDef (DiscreteLatticeType ltyInt)
+
+latticeTypeDef_Symbol = name."Symbol" /\ LatticeTypeDef (DiscreteLatticeType ltyString)
+
+relation_Token =
+  name."Token"
+    /\ Relation
+        { domain: ltySymbol `prod12` (ltyIndex `prod12` ltyIndex)
+        , render:
+            case _ of
+              PairTerm s (PairTerm i0 i1) -> do
+                i0 <- i0 # render
+                i1 <- i1 # render
+                [ HH.sub_ i0 :: Html ] ⊕ s ⊕ [ HH.sub_ i1 :: Html ] ⊕ mempty
+              t -> unsafeCrashWith ("invalid Token term: " <> show t)
+        , canonical_term: VarTerm (newVarName "s") `pair` (VarTerm (newVarName "i0") `pair` VarTerm (newVarName "i1"))
+        }
+
+relation_Parse renderAst =
+  name."Parse"
+    /\ Relation
+        { domain: ltyAst `prod12` (ltyIndex `prod12` ltyIndex)
+        , render:
+            case _ of
+              PairTerm ast (PairTerm i0 i1) -> do
+                i0 <- i0 # render
+                i1 <- i1 # render
+                [ HH.sub_ i0 :: Html ] ⊕ renderAst ast ⊕ [ HH.sub_ i1 :: Html ] ⊕ mempty
+              t -> unsafeCrashWith ("invalid Parse term: " <> show t)
+        , canonical_term: VarTerm (newVarName "ast") `pair` (VarTerm (newVarName "i0") `pair` VarTerm (newVarName "i1"))
+        }
+
+compileInput :: Array String -> Array (FixedName /\ Rule)
+compileInput ss =
+  ss
+    # Array.mapWithIndex \i s ->
+        (FixedName (s <> "#" <> show i))
+          /\ Rule
+              { hypotheses: mempty
+              , conclusion: token (LiteralTerm s (NamedDataType name."String")) (LiteralTerm (show i) (NamedDataType name."Int")) (LiteralTerm (show (i + 1)) (NamedDataType name."Int"))
+              }
+
+token :: Term -> Term -> Term -> Prop
+token str i j = Prop name."Token" (str `pair` (i `pair` j))
 
 -- --------------------------------------------------------------------------------
 -- -- Examples

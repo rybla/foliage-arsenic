@@ -1,11 +1,12 @@
 module Foliage.Interpretation where
 
+import Foliage.Common
 import Foliage.Program
 import Prelude
 import Control.Bind (bindFlipped)
 import Control.Monad.Error.Class (class MonadThrow)
-import Control.Monad.Except (ExceptT(..), mapExceptT, runExcept, runExceptT, throwError)
-import Control.Monad.Reader (class MonadReader, ask, runReaderT)
+import Control.Monad.Except (ExceptT, mapExceptT, runExcept, runExceptT, throwError)
+import Control.Monad.Reader (class MonadReader, ask, runReader, runReaderT)
 import Control.Monad.State (class MonadState, get, modify, modify_, runStateT)
 import Control.Monad.Trans.Class (lift)
 import Control.Monad.Writer (class MonadWriter)
@@ -25,8 +26,7 @@ import Data.Traversable (traverse, traverse_)
 import Data.Tuple (fst)
 import Data.Tuple.Nested (type (/\), (/\))
 import Debug as Debug
-import Foliage.App.Rendering (Html, line, render)
-import Foliage.Common (Exc(..), _apply_rule, _compare, _error, fromOpaque, map_Exc_label)
+import Foliage.Common (Exc(..), Html, _apply_rule, _compare, _error, fromOpaque, map_Exc_label)
 import Halogen.HTML as HH
 import Type.Proxy (Proxy(..))
 import Unsafe (todo)
@@ -101,7 +101,7 @@ interpProgram (Program prog) = do
                       # nextHypothesis
                       # case _ of
                           Left conclusion -> Right { prop: conclusion, isNew: false }
-                          Right { hypothesis: hypothesis@(Hypothesis (Prop prop_name _) _), rule' } -> Left (Map.singleton prop_name (List.singleton { hypothesis, rule' }))
+                          Right (RipeRule { hypothesis: hypothesis@(Hypothesis (Prop prop_name _) _), rule' }) -> Left (Map.singleton prop_name (List.singleton (RipeRule { hypothesis, rule' })))
                 )
             # lmap List.fold
       in
@@ -146,6 +146,11 @@ fixpointFocusModule = do
       resolveProp active_prop.prop
       fixpointFocusModule
 
+askRenderCtx :: forall m. MonadReader Ctx m => m RenderCtx
+askRenderCtx = do
+  Ctx ctx  <- ask
+  pure (RenderCtx { mod: ctx.focusModule })
+
 learnProp ::
   forall m.
   MonadReader Ctx m =>
@@ -160,7 +165,8 @@ learnProp prop@(Prop prop_name _) = do
       tellLog { label: "learn prop . failure", messages: [ "reason" /\ (exc # show # HH.text # pure # HH.div []) ] }
 
     success known_props' = do
-      tellLog { label: "learn prop . success", messages: [ "prop" /\ (prop # render # line # HH.div []) ] }
+      renderCtx <- askRenderCtx
+      tellLog { label: "learn prop . success", messages: [ "prop" /\ (prop # render # line # flip runReader renderCtx # HH.div []) ] }
       modify_ \(Env env') -> Env env' { known_props = known_props' }
   env.known_props # Map.lookup prop_name
     # case _ of
@@ -183,6 +189,7 @@ joinProps g props prop = do
   props
     # List.foldM
         ( \known_props prop' -> do
+            renderCtx <- askRenderCtx
             compareProp (prop ^. g) (prop' ^. g)
               # runExceptT
               # lift
@@ -191,15 +198,15 @@ joinProps g props prop = do
                   Left _ -> pure (prop' : known_props)
                   -- prop < prop' ==> prop is subsumed
                   Right (LT /\ _) -> do
-                    tellLog { label: "joinProps . props subsume prop", messages: [ "prop" /\ (prop ^. g # render # line # HH.div []) ] }
+                    tellLog { label: "joinProps . props subsume prop", messages: [ "prop" /\ (prop ^. g # render # line # flip runReader renderCtx # HH.div []) ] }
                     throwError (Exc { label: Proxy :: Proxy "ignore prop", source: "joinProps", description: show (prop ^. g) <> " is subsumed by " <> show (prop' ^. g) })
                   -- prop = prop' ==> prop is subsumed
                   Right (EQ /\ _) -> do
-                    tellLog { label: "joinProps . props subsume prop", messages: [ "prop" /\ (prop ^. g # render # line # HH.div []) ] }
+                    tellLog { label: "joinProps . props subsume prop", messages: [ "prop" /\ (prop ^. g # render # line # flip runReader renderCtx # HH.div []) ] }
                     throwError (Exc { label: Proxy :: Proxy "ignore prop", source: "joinProps", description: show (prop ^. g) <> " is subsumed by " <> show (prop' ^. g) })
                   -- prop > prop' ==> prop' is subsumed so drop prop'
                   Right (GT /\ _) -> do
-                    tellLog { label: "joinProps . prop subsumes prop'", messages: [ "prop" /\ (prop ^. g # render # line # HH.div []), "prop'" /\ (prop' ^. g # render # line # HH.div []) ] }
+                    tellLog { label: "joinProps . prop subsumes prop'", messages: [ "prop" /\ (prop ^. g # render # line # flip runReader renderCtx # HH.div []), "prop'" /\ (prop' ^. g # render # line # flip runReader renderCtx # HH.div []) ] }
                     pure known_props
         )
         Nil
@@ -225,7 +232,8 @@ resolveProp ::
   MonadWriter (Array Log) m =>
   Prop -> m Unit
 resolveProp prop@(Prop prop_name _) = do
-  tellLog { label: "resolve prop", messages: [ "prop" /\ (prop # render # line # HH.div []) ] }
+  renderCtx <- askRenderCtx
+  tellLog { label: "resolve prop", messages: [ "prop" /\ (prop # render # line # flip runReader renderCtx # HH.div []) ] }
   Env env <- get
   -- rules that result from applying `prop` to a rule
   new_ripe_rules :: List RipeRule <-
@@ -234,15 +242,14 @@ resolveProp prop@(Prop prop_name _) = do
       # fromMaybe Nil
       # traverse
           ( \ripe_rule -> do
-              -- ripe_rule <- freshenRipeRule ripe_rule # pure
               (applyRipeRuleToProp ripe_rule prop # runExceptT)
                 >>= case _ of
                     Left exc -> do
                       tellLog
                         { label: "resolve prop . apply rule . failure"
                         , messages:
-                            [ "prop" /\ (prop # render # line # HH.div [])
-                            , "ripe_rule" /\ (ripe_rule # from_RipeRule_to_Rule # render # line # HH.div [])
+                            [ "prop" /\ (prop # render # line # flip runReader renderCtx # HH.div [])
+                            , "ripe_rule" /\ (ripe_rule # from_RipeRule_to_Rule # render # line # flip runReader renderCtx # HH.div [])
                             , "reason" /\ (exc # show # HH.text # pure # HH.div [])
                             ]
                         }
@@ -251,10 +258,10 @@ resolveProp prop@(Prop prop_name _) = do
                       tellLog
                         { label: "resolve prop . apply rule . success"
                         , messages:
-                            [ "prop" /\ (prop # render # line # HH.div [])
-                            , "ripe_rule" /\ (ripe_rule # from_RipeRule_to_Rule # render # line # HH.div [])
-                            , "sigma" /\ (sigma # render # line # HH.div [])
-                            , "sigma rule" /\ (rule' # render # line # HH.div [])
+                            [ "prop" /\ (prop # render # line # flip runReader renderCtx # HH.div [])
+                            , "ripe_rule" /\ (ripe_rule # from_RipeRule_to_Rule # render # line # flip runReader renderCtx # HH.div [])
+                            , "sigma" /\ (sigma # render # line # flip runReader renderCtx # HH.div [])
+                            , "sigma rule" /\ (rule' # render # line # flip runReader renderCtx # HH.div [])
                             ]
                         }
                       case nextHypothesis rule' of
@@ -277,14 +284,15 @@ deferProp ::
   MonadThrow (Exc "error") m =>
   Boolean -> Prop -> m Unit
 deferProp isNew prop@(Prop prop_name _) = do
-  tellLog { label: "defer prop", messages: [ "prop" /\ (prop # render # line # HH.div []), "isNew" /\ (isNew # show # HH.text # pure # HH.div []) ] }
+  renderCtx <- askRenderCtx
+  tellLog { label: "defer prop", messages: [ "prop" /\ (prop # render # line # flip runReader renderCtx # HH.div []), "isNew" /\ (isNew # show # HH.text # pure # HH.div []) ] }
   Env env <- get
   let
     failure exc = do
-      tellLog { label: "defer prop . failure", messages: [ "prop" /\ (prop # render # line # HH.div []), "reason" /\ (exc # show # HH.text # pure # HH.div []) ] }
+      tellLog { label: "defer prop . failure", messages: [ "prop" /\ (prop # render # line # flip runReader renderCtx # HH.div []), "reason" /\ (exc # show # HH.text # pure # HH.div []) ] }
 
     success active_props = do
-      tellLog { label: "defer prop . success", messages: [ "prop" /\ (prop # render # line # HH.div []) ] }
+      tellLog { label: "defer prop . success", messages: [ "prop" /\ (prop # render # line # flip runReader renderCtx # HH.div []) ] }
       modify_ \(Env env') -> Env env' { active_props = active_props }
   insertProp (Lens.Record.prop (Proxy :: Proxy "prop")) env.active_props { prop, isNew }
     >>= case _ of
@@ -314,8 +322,10 @@ deferRipeRule ::
   MonadWriter (Array Log) m =>
   RipeRule -> m Unit
 deferRipeRule ripe_rule_ = do
-  ripe_rule@{ hypothesis: Hypothesis (Prop prop_name _) _ } <- ripe_rule_ # freshenRipeRule # pure
-  tellLog { label: "defer rule", messages: [ "ripe_rule" /\ (ripe_rule # from_RipeRule_to_Rule # render # line # HH.div []) ] }
+  ripe_rule@(RipeRule { hypothesis: Hypothesis (Prop prop_name _) _ }) <- ripe_rule_ # freshenVarNames # pure
+  -- ripe_rule@{ hypothesis: Hypothesis (Prop prop_name _) _ } <- ripe_rule_ # pure
+  renderCtx <- askRenderCtx
+  tellLog { label: "defer rule", messages: [ "ripe_rule" /\ (ripe_rule # from_RipeRule_to_Rule # render # line # flip runReader renderCtx # HH.div []) ] }
   modify_ \(Env env) -> Env env { ripe_rules = env.ripe_rules # Map.insertWith append prop_name (List.singleton ripe_rule) }
   Env env <- get
   props <-
@@ -330,12 +340,6 @@ deferRipeRule ripe_rule_ = do
           )
   props # traverse_ (deferProp false)
 
-freshenRipeRule :: RipeRule -> RipeRule
-freshenRipeRule ripe_rule =
-  { hypothesis: ripe_rule.hypothesis # freshenVarNames
-  , rule': ripe_rule.rule' # freshenVarNames
-  }
-
 applyRipeRuleToProp ::
   forall m.
   MonadReader Ctx m =>
@@ -343,8 +347,7 @@ applyRipeRuleToProp ::
   MonadWriter (Array Log) m =>
   MonadState Env m =>
   RipeRule -> Prop -> ExceptT (Exc "apply rule") m (TermSubst /\ Rule)
-applyRipeRuleToProp ripe_rule@{ hypothesis: Hypothesis hyp_prop hyp_sides } prop = do
-  -- ripe_rule@{ hypothesis: Hypothesis hyp_prop hyp_sides } <- freshenRipeRule ripe_rule # pure
+applyRipeRuleToProp (RipeRule ripe_rule@{ hypothesis: Hypothesis hyp_prop hyp_sides }) prop = do
   -- first, check if prop satisfies hypothesis_prop
   sigma <-
     compareProp hyp_prop prop
@@ -527,11 +530,6 @@ throwError_compareTerm lty t1 t2 =
         , description: "in lattice " <> show lty <> ", " <> show t1 <> " !<= " <> show t2
         }
     )
-
-lookup :: forall m56 a57 a60. Ord a60 => MonadThrow (Exc "error") m56 => Show a60 => String -> a60 -> Map a60 a57 -> m56 a57
-lookup label x m = case Map.lookup x m of
-  Nothing -> throwError (Exc { label: _error, source: "lookup", description: label <> " not found: " <> show x })
-  Just a -> pure a
 
 partitionEither :: forall a b c. (a -> Either b c) -> List a -> (List b /\ List c)
 partitionEither p xs = List.foldr select (Nil /\ Nil) xs

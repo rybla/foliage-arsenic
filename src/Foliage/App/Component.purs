@@ -27,7 +27,6 @@ import Type.Proxy (Proxy(..))
 import Unsafe as Unsafe
 
 -- default_program = Example.Dijkstra.diamond
--- default_program = Example.Parsing.nat
 -- default_program = Example.Typing.test
 default_program = Example.Parsing.nat
 
@@ -39,7 +38,7 @@ data Action
 component :: forall query input output. Component query input output Aff
 component = mkComponent { initialState, eval, render }
   where
-  initialState input = {}
+  initialState input = { program: default_program # Lazy.force }
 
   eval = mkEval defaultEval { handleAction = handleAction }
 
@@ -47,6 +46,7 @@ component = mkComponent { initialState, eval, render }
     EditorOutput output -> case output of
       Editor.Component.UpdatedProgram prog -> do
         -- clear output
+        H.modify_ _ { program = prog }
         H.tell _viewer unit (Viewer.Component.SetResult Nothing)
         H.tell _console unit (Console.Component.SetLogs [])
         pure unit
@@ -81,7 +81,7 @@ component = mkComponent { initialState, eval, render }
         pure unit
 
   render state =
-    HH.div [ Style.style $ [ "width: 100%", "background-color: rgba(10, 43, 54, 0.5)" ] ]
+    HH.div [ Style.style $ [ "width: 100%", "background-color: rgba(10, 43, 54, 0.0)" ] ]
       [ HH.div [ Style.style $ Style.padding_big <> Style.flex_column <> [ "align-items: center" ] ]
           [ HH.div [ Style.style $ [ "height: 2em" ] <> [ "vertical-align: center", "text-align: center" ] <> Style.font_fancy <> Style.underline ] [ HH.text "Foliage" ]
           , HH.div [ Style.style $ [ "width: calc(100vw - 2em)", "height: calc(100vh - 5em)" ] <> Style.flex_row <> [ "gap: 0" ] ]
@@ -91,7 +91,7 @@ component = mkComponent { initialState, eval, render }
                   ]
               , HH.div [ Style.style $ [ "height: 100%", "width: 50%", "overflow: scroll" ] <> Style.flex_column ]
                   [ HH.div [ Style.style $ Style.padding_small ]
-                      [ HH.slot _viewer unit Viewer.Component.component {} ViewerOutput ]
+                      [ HH.slot _viewer unit Viewer.Component.component { program: state.program } ViewerOutput ]
                   ]
               , HH.div [ Style.style $ [ "height: 100%", "width: 50%", "overflow: scroll" ] <> Style.flex_column ]
                   [ HH.div [ Style.style $ Style.padding_small ]

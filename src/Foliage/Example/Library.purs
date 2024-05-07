@@ -136,3 +136,7 @@ prod12 = ProductLatticeType FirstThenSecond_ProductLatticeTypeOrdering
 
 pair :: Term -> Term -> Term
 pair = PairTerm
+
+ltyUnit = UnitLatticeType
+
+termUnit = UnitTerm

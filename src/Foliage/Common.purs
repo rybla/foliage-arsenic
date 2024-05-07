@@ -1,10 +1,20 @@
 module Foliage.Common where
 
 import Prelude
-
+import Control.Monad.Error.Class (class MonadThrow, throwError)
+import Data.Map (Map)
+import Data.Map as Map
+import Data.Maybe (Maybe(..))
 import Data.Newtype (class Newtype)
 import Data.Symbol (class IsSymbol, reflectSymbol)
+import Halogen.HTML as HH
 import Type.Proxy (Proxy(..))
+
+type Html
+  = HH.PlainHTML
+
+type Htmls
+  = Array Html
 
 newtype Exc (label :: Symbol)
   = Exc
@@ -40,3 +50,8 @@ instance _Show_Opaque :: IsSymbol label => Show (Opaque label a) where
 
 fromOpaque :: forall t34 label35. Opaque label35 t34 -> t34
 fromOpaque (Opaque _ a) = a
+
+lookup :: forall m k v. Ord v => MonadThrow (Exc "error") m => Show v => String -> v -> Map v k -> m k
+lookup label x m = case Map.lookup x m of
+  Nothing -> throwError (Exc { label: _error, source: "lookup", description: label <> " not found: " <> show x })
+  Just a -> pure a

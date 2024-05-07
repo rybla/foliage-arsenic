@@ -1,8 +1,7 @@
 module Foliage.Example.Dijkstra (diamond, cycle) where
 
-import Prelude
 import Foliage.Program
-import Data.Tuple.Nested (type (/\), (/\))
+import Prelude
 import Control.Monad.Error.Class (throwError)
 import Control.Monad.Except (ExceptT)
 import Control.Plus (empty)
@@ -22,7 +21,12 @@ import Data.Maybe (Maybe(..), maybe)
 import Data.Newtype (wrap)
 import Data.String as String
 import Data.Tuple (Tuple(..))
-import Foliage.Common (Exc(..), Opaque(..), _error)
+import Data.Tuple.Nested (type (/\), (/\))
+import Foliage.App.Style as Style
+import Foliage.Common (Exc(..), Opaque(..), Html, _error)
+import Foliage.Example.Library (pair)
+import Halogen.HTML as HH
+import Partial.Unsafe (unsafeCrashWith)
 import Prelude as Prelude
 import Type.Proxy (Proxy(..))
 
@@ -107,6 +111,14 @@ compare =
     # homogeneous
     # map (Opaque (Proxy :: Proxy "compare"))
 
+ltyWeight = NamedLatticeType (name `Homo.get` _.weight)
+
+ltyNode = NamedLatticeType (name `Homo.get` _.node)
+
+dtyWeight = NamedDataType (name `Homo.get` _.weight)
+
+dtyNode = NamedDataType (name `Homo.get` _.node)
+
 make_dijkstra :: String -> Graph -> Lazy Program
 make_dijkstra label graph =
   Lazy.defer \_ ->
@@ -151,8 +163,51 @@ This program implements Dijstra's algorithm for computing the shortest path in a
                         ]
                   , relations:
                       Map.fromFoldable
-                        [ (name `Homo.get` _.edge) /\ Relation { domain: (NamedLatticeType (name `Homo.get` _.node) `lex` NamedLatticeType (name `Homo.get` _.node)) `lex` NamedLatticeType (name `Homo.get` _.weight) }
-                        , (name `Homo.get` _.dist) /\ Relation { domain: (NamedLatticeType (name `Homo.get` _.node) `lex` NamedLatticeType (name `Homo.get` _.node)) `lex` NamedLatticeType (name `Homo.get` _.weight) }
+                        [ (name `Homo.get` _.edge)
+                            /\ Relation
+                                { domain: (ltyNode `lex` ltyNode) `lex` ltyWeight
+                                , render:
+                                    case _ of
+                                      PairTerm (PairTerm n1 n2) w -> do
+                                        w <- w ⊕ mempty
+                                        n1 <- n1 ⊕ mempty
+                                        n2 <- n2 ⊕ mempty
+                                        -- ➡
+                                        pure
+                                          [ HH.div [ Style.style [ "display: inline-flex", "flex-direction: row", "gap: 0.5em", "align-items: center", "justify-content: center" ] ]
+                                              [ HH.div [] n1
+                                              , HH.div [ Style.style [ "display: flex", "flex-direction: column", "gap: 0", "align-items: center", "justify-content: center" ] ]
+                                                  [ HH.div [ Style.style [ "margin-bottom: -1.2em", "font-size: 0.7em" ] ] w
+                                                  , HH.div [ Style.style [ "font-size: 1.5em" ] ] [ HH.text "⟶" ]
+                                                  ]
+                                              , HH.div [] n2
+                                              ]
+                                          ]
+                                      t -> unsafeCrashWith ("[render] invalid edge term: " <> show t)
+                                , canonical_term: (VarTerm (newVarName "n1") `pair` VarTerm (newVarName "n2")) `pair` VarTerm (newVarName "w")
+                                }
+                        , (name `Homo.get` _.dist)
+                            /\ Relation
+                                { domain: (ltyNode `lex` ltyNode) `lex` ltyWeight
+                                , render:
+                                    case _ of
+                                      PairTerm (PairTerm n1 n2) w -> do
+                                        w <- w ⊕ mempty
+                                        n1 <- n1 ⊕ mempty
+                                        n2 <- n2 ⊕ mempty
+                                        pure
+                                          [ HH.div [ Style.style [ "display: inline-flex", "flex-direction: row", "gap: 0.5em", "align-items: center", "justify-content: center" ] ]
+                                              [ HH.div [] n1
+                                              , HH.div [ Style.style [ "display: flex", "flex-direction: column", "gap: 0", "align-items: center", "justify-content: center" ] ]
+                                                  [ HH.div [ Style.style [ "margin-bottom: -0.8em", "font-size: 0.7em" ] ] w
+                                                  , HH.div [ Style.style [ "font-size: 1.5em" ] ] [ HH.text "⇒" ]
+                                                  ]
+                                              , HH.div [] n2
+                                              ]
+                                          ]
+                                      t -> unsafeCrashWith ("[render] invalid dist term: " <> show t)
+                                , canonical_term: (VarTerm (newVarName "n1") `pair` VarTerm (newVarName "n2")) `pair` VarTerm (newVarName "w")
+                                }
                         ]
                   , rules:
                       Map.fromFoldable
@@ -208,7 +263,7 @@ data Graph
 compileGraph :: Graph -> Array (FixedName /\ Rule)
 compileGraph (Graph { start_node: n, edges: es }) =
   Array.cons
-    ( FixedName (show n <> " <==> " <> show n)
+    ( FixedName (show n <> " ⇔ " <> show n)
         /\ Rule
             { hypotheses: Nil
             , conclusion: Prop (name `Homo.get` _.dist) ((LiteralTerm (show n) (NamedDataType (name `Homo.get` _.int)) `PairTerm` LiteralTerm (show n) (NamedDataType (name `Homo.get` _.int))) `PairTerm` LiteralTerm (show 0) (NamedDataType (name `Homo.get` _.int)))
@@ -217,7 +272,7 @@ compileGraph (Graph { start_node: n, edges: es }) =
     (es <#> f)
   where
   f ((n1 /\ n2) /\ w) =
-    (FixedName (show n1 <> " -> " <> show n2))
+    (FixedName (show n1 <> " → " <> show n2))
       /\ Rule
           { hypotheses: Nil
           , conclusion: Prop (name `Homo.get` _.edge) ((LiteralTerm (show n1) (NamedDataType (name `Homo.get` _.int)) `PairTerm` LiteralTerm (show n2) (NamedDataType (name `Homo.get` _.int))) `PairTerm` LiteralTerm (show w) (NamedDataType (name `Homo.get` _.int)))

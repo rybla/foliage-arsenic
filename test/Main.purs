@@ -3,6 +3,7 @@ module Test.Main where
 import Data.Tuple.Nested
 import Foliage.Program
 import Prelude
+
 import Control.Monad.Except (Except, ExceptT(..), runExcept, runExceptT, throwError)
 import Control.Monad.Reader (runReaderT)
 import Control.Monad.State (evalStateT)
@@ -18,6 +19,7 @@ import Data.Tuple (fst)
 import Effect (Effect)
 import Effect.Aff (launchAff_)
 import Foliage.Common (Exc(..), Opaque(..), _error)
+import Foliage.Example.Library (pair, termUnit)
 import Foliage.Interpretation (Ctx(..), compareProp)
 import Partial.Unsafe (unsafeCrashWith)
 import Prelude as Prelude
@@ -27,6 +29,7 @@ import Test.Spec.Reporter (consoleReporter)
 import Test.Spec.Runner (runSpec)
 import Test.Spec.Runner.Event (Name)
 import Type.Proxy (Proxy(..))
+import Unsafe (todo)
 
 main :: Effect Unit
 main = launchAff_ (runSpec [ consoleReporter ] test)
@@ -83,7 +86,13 @@ test_comparisons =
       , relations:
           Map.fromFoldable
             {-[ name `Homo.get` _.p /\ Relation { domain: (intLty `lex` intLty) `lex` intLty } ]-}
-            [ name `Homo.get` _.p /\ Relation { domain: (intLty `lex` intLty) `lex` OppositeLatticeType intLty } ]
+            [ name `Homo.get` _.p
+                /\ Relation
+                    { domain: (intLty `lex` intLty) `lex` OppositeLatticeType intLty
+                    , render: \_ -> todo "render P"
+                    , canonical_term: (VarTerm (newVarName "m") `pair` VarTerm (newVarName "n")) `pair` VarTerm (newVarName "l")
+                    }
+            ]
       , rules: empty
       }
 

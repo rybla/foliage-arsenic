@@ -6,8 +6,7 @@ import Prelude
 import Data.Array as Array
 import Data.Maybe (Maybe(..), maybe)
 import Effect.Aff (Aff)
-import Foliage.App.Rendering (Html, (⊕))
-import Foliage.App.Rendering as Rendering
+import Foliage.Program as Program
 import Foliage.App.Style as Style
 import Foliage.Interpretation (Env(..), Log(..))
 import Foliage.Program (from_RipeRule_to_Rule)
@@ -61,7 +60,7 @@ component = H.mkComponent { initialState, eval, render }
           ]
           [ HH.text log.label ]
       , HH.div [ Style.style $ Style.flex_column <> [ "padding-left: 1.0em", "gap: 1em" ] ]
-          -- (log.messages # map (renderLogMessage >>> Rendering.line >>> HH.div [ Style.style $ [ "border-top: 1px solid black" ] ] >>> HH.fromPlainHTML))
+          -- (log.messages # map (renderLogMessage >>> Program.line >>> HH.div [ Style.style $ [ "border-top: 1px solid black" ] ] >>> HH.fromPlainHTML))
           ( log.messages
               # map \(label /\ body) ->
                   HH.div [ Style.style $ Style.flex_row ]

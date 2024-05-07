@@ -1,28 +1,42 @@
 module Foliage.Program where
 
+import Foliage.Common
 import Prelude
-
+import Prelude
 import Control.Bind (bindFlipped)
 import Control.Monad.Error.Class (throwError)
 import Control.Monad.Except (ExceptT, Except)
+import Control.Monad.Except (runExcept)
+import Control.Monad.Reader (Reader, ask)
 import Control.Monad.State (evalState, get, modify_)
+import Data.Array as Array
 import Data.Either (Either(..))
+import Data.Either (either)
 import Data.Eq.Generic (genericEq)
 import Data.Foldable (class Foldable, null)
+import Data.FunctorWithIndex (mapWithIndex)
 import Data.Generic.Rep (class Generic)
 import Data.List (List(..), (:))
+import Data.List as List
+import Data.Map (Map)
 import Data.Map (Map)
 import Data.Map as Map
+import Data.Map as Map
 import Data.Maybe (Maybe(..), fromMaybe, maybe)
+import Data.Maybe (Maybe(..), maybe)
 import Data.Newtype (class Newtype)
 import Data.Ord.Generic (genericCompare)
 import Data.Show.Generic (genericShow)
 import Data.Traversable (class Traversable, traverse)
+import Data.Tuple.Nested ((/\))
 import Data.Tuple.Nested (type (/\))
+import Debug as Debug
 import Effect.Ref (Ref)
 import Effect.Ref as Ref
 import Effect.Unsafe (unsafePerformEffect)
-import Foliage.Common (Exc, Opaque)
+import Foliage.App.Style as Style
+import Halogen.HTML as HH
+import Partial.Unsafe (unsafeCrashWith)
 import Record as Record
 
 data Program
@@ -41,6 +55,11 @@ instance _Show_Program :: Show Program where
   show x = genericShow x
 
 lookupModule label k = (\(Module mod) -> mod) >>> Record.get label >>> Map.lookup k
+
+getMainModule :: Program -> Module
+getMainModule (Program prog) = case Map.lookup mainModuleName prog.modules of
+  Nothing -> unsafeCrashWith $ "program " <> show prog.name <> " does not have a Main module"
+  Just mod -> mod
 
 data Module
   = Module
@@ -177,15 +196,17 @@ instance _Show_FunctionDef :: Show FunctionDef where
 data Relation
   = Relation
     { domain :: LatticeType
+    , render :: Term -> RenderM Htmls
+    , canonical_term :: Term
     }
 
 derive instance _Generic_Relation :: Generic Relation _
 
 instance _Eq_Relation :: Eq Relation where
-  eq x = genericEq x
+  eq (Relation r1) (Relation r2) = r1.domain == r2.domain
 
 instance _Show_Relation :: Show Relation where
-  show x = genericShow x
+  show (Relation r) = "(Relation " <> show r.domain <> ")"
 
 type Rule
   = RuleF VarName
@@ -213,11 +234,25 @@ instance _Show_Rule :: Show Rule where
 type RipeRule
   = RipeRuleF VarName
 
-type RipeRuleF x
-  = { hypothesis :: HypothesisF x, rule' :: RuleF x }
+data RipeRuleF x
+  = RipeRule { hypothesis :: HypothesisF x, rule' :: (RuleF x) }
+
+derive instance _Generic_RipeRuleF :: Generic (RipeRuleF x) _
+
+derive instance _Functor_RipeRuleF :: Functor RipeRuleF
+
+derive instance _Foldable_RipeRuleF :: Foldable RipeRuleF
+
+derive instance _Traversable_RipeRuleF :: Traversable RipeRuleF
+
+instance _Eq_RipeRule :: Eq RipeRule where
+  eq x = genericEq x
+
+instance _Show_RipeRule :: Show RipeRule where
+  show x = genericShow x
 
 from_RipeRule_to_Rule :: RipeRule -> Rule
-from_RipeRule_to_Rule { hypothesis, rule': Rule { hypotheses, conclusion } } = Rule { hypotheses: hypothesis : hypotheses, conclusion }
+from_RipeRule_to_Rule (RipeRule { hypothesis, rule': Rule { hypotheses, conclusion } }) = Rule { hypotheses: hypothesis : hypotheses, conclusion }
 
 fromNoHypothesesRule :: Rule -> Maybe Prop
 fromNoHypothesesRule (Rule rule) =
@@ -229,7 +264,7 @@ fromNoHypothesesRule (Rule rule) =
 nextHypothesis :: Rule -> Either Prop RipeRule
 nextHypothesis (Rule rule) = case rule.hypotheses of
   Nil -> Left rule.conclusion
-  Cons hypothesis hypotheses -> Right { hypothesis, rule': Rule rule { hypotheses = hypotheses } }
+  Cons hypothesis hypotheses -> Right (RipeRule { hypothesis, rule': Rule rule { hypotheses = hypotheses } })
 
 type Hypothesis
   = HypothesisF VarName
@@ -364,6 +399,11 @@ substTerm sigma (PairTerm s t) = PairTerm (substTerm sigma s) (substTerm sigma t
 
 substTerm sigma (SetTerm ts) = SetTerm (ts <#> substTerm sigma)
 
+freshVarNameIndexRef :: Ref Int
+freshVarNameIndexRef =
+  unsafePerformEffect do
+    0 # Ref.new
+
 freshenVarName :: VarName -> VarName
 freshenVarName (VarName s _) =
   unsafePerformEffect do
@@ -371,10 +411,20 @@ freshenVarName (VarName s _) =
     freshVarNameIndexRef # Ref.modify_ (_ + 1)
     pure n
 
-freshVarNameIndexRef :: Ref Int
-freshVarNameIndexRef =
-  unsafePerformEffect do
-    0 # Ref.new
+-- | For each variable name in `f`, maps it to a fresh version of that name.
+freshenVarNames :: forall f. Show (f VarName) => Traversable f => f VarName -> f VarName
+freshenVarNames t = t # traverse f # flip evalState Map.empty
+  where
+  f x = do
+    sigma <- get
+    case Map.lookup x sigma of
+      Nothing -> do
+        let
+          y = freshenVarName x
+        modify_ (Map.insert x y)
+        pure y
+      Just y -> do
+        pure y
 
 -- | LatticeOrdering:
 -- | - `a = b` if there exists a substitution of `a` and a substitution of `b`
@@ -438,16 +488,236 @@ getValidatedArg { f, x, dt, dt_name, fromString } args =
 throwExternalFunctionCallError :: forall a. String -> String -> Either String a
 throwExternalFunctionCallError f msg = throwError $ "when calling external function " <> f <> ", " <> msg
 
--- | For each variable name in `f`, maps it to a fresh version of that name.
-freshenVarNames :: forall f. Traversable f => f VarName -> f VarName
-freshenVarNames = traverse f >>> flip evalState Map.empty
-  where
-  f x = do
-    sigma <- get
-    case Map.lookup x sigma of
-      Nothing -> do
-        let
-          y = freshenVarName x
-        modify_ (Map.insert x y)
-        pure y
-      Just y -> pure y
+--------------------------------------------------------------------------------
+-- Rendering
+--------------------------------------------------------------------------------
+newtype RenderCtx
+  = RenderCtx { mod :: Module }
+
+type RenderM
+  = Reader RenderCtx
+
+class Render a where
+  render :: a -> RenderM Htmls
+
+instance _Render_Htmls :: Render Htmls where
+  render = pure
+
+instance _Render_RenderM_Htmls :: Render (RenderM Htmls) where
+  render = identity
+
+append_render :: forall a. Render a => a -> RenderM Htmls -> RenderM Htmls
+append_render a = append (render a)
+
+infixr 5 append_render as ⊕
+
+divs :: _ -> Array (RenderM Htmls) -> RenderM Htmls
+divs props = map (pure <<< HH.div props) <<< Array.fold
+
+instance _Render_Program :: Render Program where
+  render (Program prog) =
+    divs [ Style.style $ Style.flex_column <> [ "gap: 1.0em" ] ]
+      $ [ line (Punc "program" ⊕ prog.name ⊕ mempty)
+        , prog.doc # maybe mempty doc_block
+        , prog.modules
+            # map render
+            # Map.values
+            # Array.fromFoldable
+            # Array.fold
+        ]
+
+doc_block :: String -> RenderM Htmls
+doc_block s =
+  [ HH.div [ Style.style $ Style.padding_small <> Style.font_prose <> [ "max-width: 30em", "background-color: rgba(0, 0, 0, 0.1)", "white-space: pre-wrap" ] ]
+      [ HH.text s ]
+  ]
+    # pure
+
+instance _Render_Module :: Render Module where
+  render (Module mod) =
+    definition
+      (mod.doc <#> doc_block)
+      ("module" # Punc # render)
+      (mod.name # render)
+      ( let
+          renderModDefinition :: forall a. RenderM Htmls -> (a -> RenderM Htmls) -> Map FixedName a -> RenderM Htmls
+          renderModDefinition label renderBody items =
+            items
+              # mapWithIndex (\name body -> definition Nothing label (render name) (renderBody body))
+              # Map.values
+              # Array.fromFoldable
+              # Array.fold
+        in
+          [ mod.dataTypeDefs
+              # renderModDefinition (Punc "data type" ⊕ mempty) case _ of
+                  DataTypeDef dty -> line (dty ⊕ mempty)
+                  ExternalDataTypeDef str -> line (Punc "external" ⊕ Raw str ⊕ mempty)
+          , mod.functionDefs
+              # renderModDefinition (Punc "function" ⊕ mempty) case _ of
+                  ExternalFunctionDef def -> line (Raw def.name ⊕ Punc "(" ⊕ ((def.inputs <#> \(x /\ dty) -> Raw x ⊕ Punc ":" ⊕ dty ⊕ mempty) # Array.intercalate (Punc "," ⊕ mempty)) ⊕ Punc ")" ⊕ Punc "→" ⊕ def.output ⊕ mempty)
+          , mod.latticeTypeDefs
+              # renderModDefinition (Punc "lattice type" ⊕ mempty) case _ of
+                  LatticeTypeDef lty -> line (lty ⊕ mempty)
+                  ExternalLatticeTypeDef def -> line (Punc "external" ⊕ Raw def.name ⊕ mempty)
+          , mod.relations
+              # renderModDefinition (Punc "relation" ⊕ mempty) \(Relation rel) -> do
+                  verbose <- line (Punc "ℛ" ⊕ rel.domain ⊕ mempty)
+                  pretty <- line (Punc "notation:" ⊕ rel.render rel.canonical_term)
+                  pure
+                    [ HH.div [ Style.style $ Style.flex_column ]
+                        [ HH.div [] verbose
+                        , HH.div [] pretty
+                        ]
+                    ]
+          , mod.rules
+              # renderModDefinition (Punc "rule" ⊕ mempty) (\rule -> pure <<< HH.div [ Style.style $ [ "display: inline-flex", "flex-direction: row" ] ] <$> render rule)
+          ]
+            # Array.fold
+      )
+
+definition :: Maybe (RenderM Htmls) -> RenderM Htmls -> RenderM Htmls -> RenderM Htmls -> RenderM Htmls
+definition mb_doc m_sort m_name m_body = do
+  divs [ Style.style $ Style.flex_column <> Style.padding_small <> Style.boundaries ]
+    [ mb_doc # maybe mempty (map (HH.div [] >>> pure))
+    , line (m_sort ⊕ m_name ⊕ Punc "=" ⊕ mempty)
+    , section m_body
+    ]
+
+instance _Render_Rule :: Render Rule where
+  render (Rule rule) = do
+    conclusion <- (rule.conclusion ⊕ mempty) # line
+    hypotheses <- rule.hypotheses # map render # List.fold
+    [ HH.div [ Style.style $ Style.flex_column ]
+        if List.null rule.hypotheses then
+          conclusion
+        else
+          [ hypotheses
+          , [ HH.div [ Style.style $ Style.horizontal_bar ] [] ]
+          , conclusion
+          ]
+            # Array.concat
+    ]
+      # pure
+
+instance _Render_LatticeType :: Render LatticeType where
+  render = case _ of
+    NamedLatticeType x -> x ⊕ mempty
+    UnitLatticeType -> Prim "Unit" ⊕ mempty
+    SumLatticeType o l r -> Punc "(" ⊕ l ⊕ plus_sup ⊕ r ⊕ Punc ")" ⊕ mempty
+      where
+      plus_sup :: RenderM Htmls
+      plus_sup = Punc "+" ⊕ pure [ HH.sup [] [ HH.text sup ] ] <#> HH.span [] >>> pure
+
+      sup = case o of
+        LeftGreaterThanRight_SumLatticeTypeOrdering -> "L>R"
+        LeftLessThanRight_SumLatticeTypeOrdering -> "L<R"
+        LeftIncomparableRight_SumLatticeTypeOrdering -> "L⋈R"
+        LeftEqualRight_SumLatticeTypeOrdering -> "L=R"
+    ProductLatticeType o f s -> Punc "(" ⊕ f ⊕ prod_sup ⊕ s ⊕ Punc ")" ⊕ mempty
+      where
+      prod_sup :: RenderM Htmls
+      prod_sup = Punc "×" ⊕ pure [ HH.sup [] [ HH.text sup ] ] <#> HH.span [] >>> pure
+
+      sup = case o of
+        FirstThenSecond_ProductLatticeTypeOrdering -> "1,2"
+    SetLatticeType o d -> Prim "Set" ⊕ Punc "(" ⊕ d ⊕ Punc ")" ⊕ mempty
+    OppositeLatticeType l -> Prim "Opposite" ⊕ Punc "(" ⊕ l ⊕ Punc ")" ⊕ mempty
+    DiscreteLatticeType l -> Prim "Discrete" ⊕ Punc "(" ⊕ l ⊕ Punc ")" ⊕ mempty
+    PowerLatticeType l -> Prim "Power" ⊕ Punc "(" ⊕ l ⊕ Punc ")" ⊕ mempty
+
+instance _Render_DataType :: Render DataType where
+  render = case _ of
+    NamedDataType x -> x ⊕ mempty
+    UnitDataType -> Prim "Unit" ⊕ mempty
+    SumDataType l r -> Punc "(" ⊕ l ⊕ Punc "+" ⊕ r ⊕ Punc ")" ⊕ mempty
+    SetDataType d -> Prim "Set" ⊕ d ⊕ mempty
+    ProductDataType f s -> Punc "(" ⊕ f ⊕ Punc "*" ⊕ s ⊕ Punc ")" ⊕ mempty
+
+instance _Render_TermSubst :: Render TermSubst where
+  render m =
+    m
+      # mapWithIndex (\x t -> x ⊕ Punc "↦" ⊕ t ⊕ mempty)
+      # Map.values
+      # Array.fromFoldable
+      # Array.intercalate (Punc "," ⊕ mempty)
+      # \es -> Punc "{" ⊕ es ⊕ Punc "}" ⊕ mempty
+
+line :: RenderM Htmls -> RenderM Htmls
+line m_es = do
+  es <- m_es
+  es
+    # Array.foldMap (\e -> [ e, HH.span [ Style.style $ [ "white-space: pre" ] ] [ HH.text " " ] ])
+    # HH.span []
+    # pure
+    # pure
+
+-- | Puntuation
+newtype Punc
+  = Punc String
+
+instance _Render_Punc :: Render Punc where
+  render (Punc s) = HH.span [ Style.style $ Style.bold <> [ "color: black" ] ] [ HH.text s ] # pure # pure
+
+-- | Primitive
+newtype Prim
+  = Prim String
+
+instance _Render_Prim :: Render Prim where
+  render (Prim s) = [ HH.text s ] # HH.span [ Style.style $ [ "color: purple" ] ] # pure # pure
+
+instance _Render_VarName :: Render VarName where
+  render (VarName s i)
+    | i == 0 = [ HH.text s ] # HH.span [ Style.style $ [ "color: darkgreen" ] ] # pure # pure
+  render (VarName s i) = [ HH.text s, HH.sub [] [ HH.text (show i) ] ] # HH.span [ Style.style $ [ "color: darkgreen" ] ] # pure # pure
+
+instance _Render_FixedName :: Render FixedName where
+  render (FixedName s) = [ HH.text s ] # HH.span [ Style.style $ [ "color: #808000" ] ] # pure # pure
+
+instance _Render_Hypothesis :: Render Hypothesis where
+  render (Hypothesis prop sides) = line (prop ⊕ mempty) ⊕ (sides # map (render >>> line) # Array.fold) ⊕ mempty
+
+instance _Render_SideHypothesis :: Render SideHypothesis where
+  render = case _ of
+    FunctionSideHypothesis side -> Punc "let" ⊕ side.resultVarVarName ⊕ Punc "=" ⊕ side.functionName ⊕ Punc "(" ⊕ ((side.args <#> render) # Array.intercalate (Punc "," ⊕ mempty)) ⊕ Punc ")" ⊕ mempty
+
+instance _Render_Prop :: Render Prop where
+  render (Prop p t) = do
+    RenderCtx { mod: Module mod } <- ask
+    Debug.traceM (show (Module mod))
+    Relation r <-
+      mod.relations
+        # lookup "relations" p
+        # runExcept
+        # either
+            (\exc -> unsafeCrashWith (show exc))
+            pure
+    r.render t
+
+instance _Render_Term :: Render Term where
+  render = case _ of
+    VarTerm x -> x ⊕ mempty
+    LiteralTerm l _ -> Lit l ⊕ mempty
+    UnitTerm -> Prim "●" ⊕ mempty
+    LeftTerm t -> Punc "(" ⊕ Prim "☜" ⊕ t ⊕ Punc ")" ⊕ mempty
+    RightTerm t -> Punc "(" ⊕ Prim "☞" ⊕ t ⊕ Punc ")" ⊕ mempty
+    PairTerm t1 t2 -> Punc "⟨" ⊕ t1 ⊕ Punc "," ⊕ t2 ⊕ Punc "⟩" ⊕ mempty
+    SetTerm ts -> Punc "{" ⊕ ((ts <#> render) # Array.intercalate (Punc "," ⊕ mempty)) ⊕ Punc "}" ⊕ mempty
+
+section :: RenderM Htmls -> RenderM Htmls
+section m_es = do
+  es <- m_es
+  es # HH.div [ Style.style $ Style.flex_column <> Style.padding_horizontal_big ] # pure # pure
+
+-- | Raw String
+newtype Raw
+  = Raw String
+
+instance _Render_Raw :: Render Raw where
+  render (Raw s) = [ HH.span [ Style.style $ [ "color: blue" ] ] [ HH.text s ] ] # pure
+
+-- | Lit String
+newtype Lit
+  = Lit String
+
+instance _Render_Lit :: Render Lit where
+  render (Lit s) = [ HH.span [ Style.style $ Style.italic <> [ "color: brown" ] ] [ HH.text s ] ] # pure

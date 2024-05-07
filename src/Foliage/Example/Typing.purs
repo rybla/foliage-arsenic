@@ -1,8 +1,7 @@
 module Foliage.Example.Typing where
 
-import Prelude
 import Foliage.Program
-import Data.Tuple.Nested (type (/\), (/\))
+import Prelude
 import Control.Monad.Except (ExceptT)
 import Control.Plus (empty)
 import Data.Either (Either)
@@ -14,11 +13,15 @@ import Data.List as List
 import Data.Map (Map)
 import Data.Map as Map
 import Data.Maybe (Maybe(..))
-import Foliage.Common (Exc, Opaque(..))
-import Foliage.Example.Library (pair, prod12, sumLIR)
+import Data.Tuple.Nested (type (/\), (/\))
+import Foliage.Common (Exc, Opaque(..), Html)
+import Foliage.Example.Library (pair, prod12, sumLIR, termUnit)
 import Foliage.Example.Library as Library
+import Halogen.HTML as HH
+import Partial.Unsafe (unsafeCrashWith)
 import Record as Record
 import Type.Proxy (Proxy(..))
+import Unsafe (todo)
 
 --------------------------------------------------------------------------------
 -- Examples
@@ -29,7 +32,7 @@ test = make_typing "Test"
 --------------------------------------------------------------------------------
 -- Definitions
 --------------------------------------------------------------------------------
-name :: Record _ 
+name :: Record _
 name =
   { "": ""
   -- external types 
@@ -142,10 +145,36 @@ make_typing label =
                       # Map.union Library.latticeTypeDefs
                 , relations:
                     -- Parsed (Term * (Index * Index))
-                    [ name."Parsed" /\ Relation { domain: ltyTerm `prod12` (ltyIndex `prod12` ltyIndex) }
+                    [ name."Parsed"
+                        /\ Relation
+                            { domain: ltyTerm `prod12` (ltyIndex `prod12` ltyIndex)
+                            , render:
+                                case _ of
+                                  PairTerm ast (PairTerm i0 i1) -> do
+                                    i0 <- i0 # render
+                                    i1 <- i1 # render
+                                    [ HH.sub_ i0 :: Html ] ⊕ ast ⊕ [ HH.sub_ i1 :: Html ] ⊕ mempty
+                                  t -> unsafeCrashWith ("invalid Parsed term: " <> show t)
+                            , canonical_term: VarTerm (newVarName "t : Term") `pair` (VarTerm (newVarName "i0 : Index") `pair` VarTerm (newVarName "i1 : Index"))
+                            }
                     -- Typed ((Term * (Index * Index)) * (Context * Type))
                     , name."Typed"
-                        /\ Relation { domain: (ltyTerm `prod12` (ltyIndex `prod12` ltyIndex)) `prod12` (ltyContext `prod12` ltyType) }
+                        /\ Relation
+                            { domain: (ltyTerm `prod12` (ltyIndex `prod12` ltyIndex)) `prod12` (ltyContext `prod12` ltyType)
+                            , render:
+                                case _ of
+                                  PairTerm (PairTerm ast (PairTerm i0 i1)) (PairTerm ctx ty) -> do
+                                    i0 <- i0 # render
+                                    i1 <- i1 # render
+                                    [ HH.sub_ i0 :: Html ] ⊕ ast ⊕ [ HH.sub_ i1 :: Html ] ⊕ [ HH.text ":" :: Html ] ⊕ ctx ⊕ [ HH.text "⊢" :: Html ] ⊕ ty ⊕ mempty
+                                  t -> unsafeCrashWith ("invalid Typed term: " <> show t)
+                            , canonical_term:
+                                VarTerm (newVarName "t : Term")
+                                  `pair`
+                                    (VarTerm (newVarName "i0 : Index") `pair` VarTerm (newVarName "i1 : Index"))
+                                  `pair`
+                                    (VarTerm (newVarName "γ : Context") `pair` VarTerm (newVarName "α : Type"))
+                            }
                     ]
                       # Map.fromFoldable
                       # Map.union Library.relations

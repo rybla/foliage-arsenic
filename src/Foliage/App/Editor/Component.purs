@@ -1,7 +1,7 @@
 module Foliage.App.Editor.Component where
 
 import Prelude
-
+import Control.Monad.Reader (runReader)
 import Control.Monad.State (get, modify_)
 import Data.Array as Array
 import Data.Lazy as Lazy
@@ -11,15 +11,16 @@ import Data.Tuple.Nested ((/\))
 import Effect.Aff (Aff)
 import Effect.Class.Console as Console
 import Foliage.App.ComponentLibrary.DropdownMenu as DropdownMenu
-import Foliage.App.Rendering as Rendering
 import Foliage.App.Style as Style
 import Foliage.Example as Example
-import Foliage.Program (Module(..), VarName(..), Program(..), mainModuleName)
+import Foliage.Program (Module(..), Program(..), RenderCtx(..), VarName(..), getMainModule, mainModuleName)
+import Foliage.Program as Program
 import Halogen (Component, defaultEval, mkComponent, mkEval)
 import Halogen as H
 import Halogen.HTML as HH
 import Halogen.HTML.Events as HE
 import Type.Proxy (Proxy(..))
+import Unsafe (todo)
 
 data Query a
   = GetProgram (Program -> a)
@@ -131,7 +132,7 @@ component = mkComponent { initialState, eval, render }
                       , HE.onChange ChangeProgramInput
                       , Style.style [ "display: none" ]
                       ]
-                  , -} HH.slot (Proxy :: Proxy "dropdown") "examples" DropdownMenu.component
+                  ,  HH.slot (Proxy :: Proxy "dropdown") "examples" DropdownMenu.component
                       { title:
                           HH.div [ Style.style $ Style.button ]
                             [ HH.text "Examples" ]
@@ -143,14 +144,17 @@ component = mkComponent { initialState, eval, render }
                           in
                             Example.examples <#> \(s /\ lazy_prog) -> label s /\ lazy_prog
                       }
-                      (SetProgram <<< Lazy.force)
+                      (SetProgram <<< Lazy.force) -}
                   ]
             ]
           , case state.load_error of
               Nothing -> []
               Just err -> [ HH.div [ Style.style $ Style.color_error ] [ HH.text err ] ]
           , [ HH.div [ Style.style $ Style.flex_column <> [ "overflow: scroll" ] ]
-                (state.program # Rendering.render # map HH.fromPlainHTML)
+                let
+                  renderCtx = RenderCtx { mod: getMainModule state.program }
+                in
+                  (state.program # Program.render # flip runReader renderCtx # map HH.fromPlainHTML)
             ]
           ]
       )
