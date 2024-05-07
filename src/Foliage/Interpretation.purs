@@ -308,7 +308,10 @@ deferRipeRule ripe_rule@{ hypothesis: Hypothesis (Prop prop_name _) _ } = do
   props # traverse_ (deferProp false)
 
 freshenRipeRule :: RipeRule -> RipeRule
-freshenRipeRule ripe_rule = todo "freshenRipeRule"
+freshenRipeRule ripe_rule =
+  { hypothesis: ripe_rule.hypothesis # freshenNames
+  , rule': ripe_rule.rule' # freshenNames
+  }
 
 applyRipeRuleToProp ::
   forall m.

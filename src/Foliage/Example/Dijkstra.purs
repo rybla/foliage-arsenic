@@ -1,7 +1,7 @@
 module Foliage.Example.Dijkstra (diamond, cycle) where
 
 import Prelude
-import Foliage.Program (DataType(..), DataTypeDef(..), FunctionDef(..), Hypothesis(..), LatticeType(..), LatticeTypeDef(..), Module(..), Name(..), ProductLatticeTypeOrdering(..), Program(..), PropF(..), Relation(..), Rule(..), SideHypothesis(..), Term, TermF(..), getValidatedArg, mainModuleName)
+import Foliage.Program
 import Data.Tuple.Nested (type (/\), (/\))
 import Control.Monad.Error.Class (throwError)
 import Control.Monad.Except (ExceptT)
@@ -81,7 +81,7 @@ name =
   , append_edge_distance: "AppendEdgeDistance"
   }
     # homogeneous
-    # map Name
+    # map staticName
 
 function ::
   Homogeneous
@@ -125,7 +125,7 @@ make_dijkstra label graph =
       lex = ProductLatticeType FirstThenSecond_ProductLatticeTypeOrdering
     in
       Program
-        { name: Name ("Dijstra . " <> label)
+        { name: staticName ("Dijstra . " <> label)
         , doc:
             """
 This program implements Dijstra's algorithm for computing the shortest path in a graph from a starting node to any other node in the graph.
@@ -179,7 +179,7 @@ This program implements Dijstra's algorithm for computing the shortest path in a
                                     }
                             , -} Tuple (name `Homo.get` _.append_edge_distance)
                                 let
-                                  { n1, n2, n3, w1, w2, w3 } = { n1: wrap "n1", n2: wrap "n2", n3: wrap "n3", w1: wrap "w1", w2: wrap "w2", w3: wrap "w3" }
+                                  { n1, n2, n3, w1, w2, w3 } = { n1: staticName "n1", n2: staticName "n2", n3: staticName "n3", w1: staticName "w1", w2: staticName "w2", w3: staticName "w3" }
                                 in
                                   Rule
                                     { hypotheses:
@@ -219,7 +219,7 @@ data Graph
 compileGraph :: Graph -> Array (Name /\ Rule)
 compileGraph (Graph { start_node: n, edges: es }) =
   Array.cons
-    ( Name (show n <> " <==> " <> show n)
+    ( staticName (show n <> " <==> " <> show n)
         /\ Rule
             { hypotheses: Nil
             , conclusion: Prop (name `Homo.get` _.dist) ((LiteralTerm (show n) (NamedDataType (name `Homo.get` _.int)) `PairTerm` LiteralTerm (show n) (NamedDataType (name `Homo.get` _.int))) `PairTerm` LiteralTerm (show 0) (NamedDataType (name `Homo.get` _.int)))
@@ -228,7 +228,7 @@ compileGraph (Graph { start_node: n, edges: es }) =
     (es <#> f)
   where
   f ((n1 /\ n2) /\ w) =
-    (wrap (show n1 <> " -> " <> show n2))
+    (staticName (show n1 <> " -> " <> show n2))
       /\ Rule
           { hypotheses: Nil
           , conclusion: Prop (name `Homo.get` _.edge) ((LiteralTerm (show n1) (NamedDataType (name `Homo.get` _.int)) `PairTerm` LiteralTerm (show n2) (NamedDataType (name `Homo.get` _.int))) `PairTerm` LiteralTerm (show w) (NamedDataType (name `Homo.get` _.int)))

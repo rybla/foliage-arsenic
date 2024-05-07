@@ -1,8 +1,7 @@
 module Foliage.Example.Library where
 
-import Data.Tuple.Nested ((/\))
-import Foliage.Program (DataType(..), DataTypeDef(..), FunctionDef(..), LatticeType(..), LatticeTypeDef(..), Name(..), ProductLatticeTypeOrdering(..), Relation, Rule, SumLatticeTypeOrdering(..), Term, TermF(..))
 import Prelude
+
 import Control.Monad.Error.Class (throwError)
 import Control.Plus (empty)
 import Data.Array as Array
@@ -12,22 +11,16 @@ import Data.Int as Int
 import Data.List (List(..))
 import Data.Map (Map)
 import Data.Map as Map
-import Data.Maybe (maybe)
+import Data.Maybe (Maybe, maybe)
 import Data.String as String
+import Data.Tuple.Nested ((/\))
 import Foliage.Common (Exc(..), Opaque(..), _error)
+import Foliage.Program (DataType(..), DataTypeDef(..), FunctionDef(..), LatticeType(..), LatticeTypeDef(..), Name(..), ProductLatticeTypeOrdering(..), Relation, Rule, SumLatticeTypeOrdering(..), Term, TermF(..))
 import Prelude as Prelude
 import Type.Proxy (Proxy(..))
+import Unsafe (todo)
 
-name ::
-  Record
-    ( "" :: Name
-    , "Index" :: Name
-    , "Int" :: Name
-    , "List String" :: Name
-    , "String" :: Name
-    , "Symbol" :: Name
-    , joinStrings :: Name
-    )
+name :: Record _
 name =
   { "": ""
   -- external type
@@ -42,26 +35,24 @@ name =
   -- relation
   }
     # homogeneous
-    # map Name
+    # map (\s -> Name s 0)
     # fromHomogeneous
 
-from_StringList :: Term -> Either String (List String)
-from_StringList = case _ of
-  ConTerm "cons" (PairTerm (LiteralTerm s (NamedDataType (Name "String"))) t) -> Cons s <$> from_StringList t
-  ConTerm "nil" UnitTerm -> pure mempty
-  _ -> throwError "invalid"
+-- from_StringList :: Term -> Either String (List String)
+-- from_StringList = case _ of
+--   ConTerm "cons" (PairTerm (LiteralTerm s (NamedDataType (Name "String" _))) t) -> Cons s <$> from_StringList t
+--   ConTerm "nil" UnitTerm -> pure mempty
+--   _ -> throwError "invalid"
 
-function ::
-  Record
-    ( joinStrings :: Opaque "function" (Map String (TermF Name) -> Either String (TermF Name))
-    )
+function :: Record _
 function =
   ( { "joinStrings":
         \args -> do
           strs <-
             args
               # Map.lookup "strs"
-              # maybe (throwError "did not find arg for parameter 'strs'") from_StringList
+              -- # maybe (throwError "did not find arg for parameter 'strs'") from_StringList
+              # (todo "joinStrings" :: Maybe _ -> Either String (List _))
               # map Array.fromFoldable
           if Array.length strs <= 2 then
             pure (LiteralTerm (String.joinWith "" strs) (NamedDataType name."String"))

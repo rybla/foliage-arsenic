@@ -4,6 +4,7 @@ import Prelude
 import Control.Bind (bindFlipped)
 import Control.Monad.Error.Class (throwError)
 import Control.Monad.Except (ExceptT, Except)
+import Control.Monad.State (evalState, get, modify_)
 import Data.Either (Either(..))
 import Data.Eq.Generic (genericEq)
 import Data.Foldable (class Foldable, null)
@@ -12,9 +13,9 @@ import Data.List (List(..), (:))
 import Data.Map (Map)
 import Data.Map as Map
 import Data.Maybe (Maybe(..), fromMaybe, maybe)
-import Data.Newtype (class Newtype, wrap)
+import Data.Ord.Generic (genericCompare)
 import Data.Show.Generic (genericShow)
-import Data.Traversable (class Traversable)
+import Data.Traversable (class Traversable, traverse)
 import Data.Tuple.Nested (type (/\))
 import Effect.Ref (Ref)
 import Effect.Ref as Ref
@@ -184,13 +185,22 @@ instance _Eq_Relation :: Eq Relation where
 instance _Show_Relation :: Show Relation where
   show x = genericShow x
 
-data Rule
+type Rule
+  = RuleF Name
+
+data RuleF x
   = Rule
-    { hypotheses :: List Hypothesis
-    , conclusion :: Prop
+    { hypotheses :: List (HypothesisF x)
+    , conclusion :: PropF x
     }
 
-derive instance _Generic_Rule :: Generic Rule _
+derive instance _Generic_RuleF :: Generic (RuleF x) _
+
+derive instance _Functor_RuleF :: Functor RuleF
+
+derive instance _Foldable_RuleF :: Foldable RuleF
+
+derive instance _Traversable_RuleF :: Traversable RuleF
 
 instance _Eq_Rule :: Eq Rule where
   eq x = genericEq x
@@ -199,7 +209,10 @@ instance _Show_Rule :: Show Rule where
   show x = genericShow x
 
 type RipeRule
-  = { hypothesis :: Hypothesis, rule' :: Rule }
+  = RipeRuleF Name
+
+type RipeRuleF x
+  = { hypothesis :: HypothesisF x, rule' :: RuleF x }
 
 from_RipeRule_to_Rule :: RipeRule -> Rule
 from_RipeRule_to_Rule { hypothesis, rule': Rule { hypotheses, conclusion } } = Rule { hypotheses: hypothesis : hypotheses, conclusion }
@@ -216,10 +229,19 @@ nextHypothesis (Rule rule) = case rule.hypotheses of
   Nil -> Left rule.conclusion
   Cons hypothesis hypotheses -> Right { hypothesis, rule': Rule rule { hypotheses = hypotheses } }
 
-data Hypothesis
-  = Hypothesis Prop (Array SideHypothesis)
+type Hypothesis
+  = HypothesisF Name
 
-derive instance _Generic_Hypothesis :: Generic Hypothesis _
+data HypothesisF x
+  = Hypothesis (PropF x) (Array (SideHypothesisF x))
+
+derive instance _Generic_HypothesisF :: Generic (HypothesisF x) _
+
+derive instance _Functor_HypothesisF :: Functor HypothesisF
+
+derive instance _Foldable_HypothesisF :: Foldable HypothesisF
+
+derive instance _Traversable_HypothesisF :: Traversable HypothesisF
 
 instance _Eq_Hypothesis :: Eq Hypothesis where
   eq x = genericEq x
@@ -231,14 +253,23 @@ substHypothesis :: TermSubst -> Hypothesis -> Hypothesis
 substHypothesis sigma = case _ of
   Hypothesis prop sides -> Hypothesis (prop # substProp sigma) (sides <#> substSideHypothesis sigma)
 
-data SideHypothesis
+type SideHypothesis
+  = SideHypothesisF Name
+
+data SideHypothesisF x
   = FunctionSideHypothesis
-    { resultVarName :: Name
+    { resultVarName :: x
     , functionName :: Name
-    , args :: Array Term
+    , args :: Array (TermF x)
     }
 
-derive instance _Generic_SideHypothesis :: Generic SideHypothesis _
+derive instance _Generic_SideHypothesisF :: Generic (SideHypothesisF x) _
+
+derive instance _Functor_SideHypothesisF :: Functor SideHypothesisF
+
+derive instance _Foldable_SideHypothesisF :: Foldable SideHypothesisF
+
+derive instance _Traversable_SideHypothesisF :: Traversable SideHypothesisF
 
 instance _Eq_SideHypothesis :: Eq SideHypothesis where
   eq x = genericEq x
@@ -261,11 +292,11 @@ data PropF x
 
 derive instance _Generic_PropF :: Generic (PropF x) _
 
-derive instance _Functor_PropF :: Functor (PropF)
+derive instance _Functor_PropF :: Functor PropF
 
-derive instance _Foldable_PropF :: Foldable (PropF)
+derive instance _Foldable_PropF :: Foldable PropF
 
-derive instance _Traversable_PropF :: Traversable (PropF)
+derive instance _Traversable_PropF :: Traversable PropF
 
 instance _Eq_PropF :: Eq x => Eq (PropF x) where
   eq x = genericEq x
@@ -280,7 +311,6 @@ data TermF x
   = VarTerm x
   | UnitTerm
   | LiteralTerm String DataType
-  | ConTerm String (TermF x)
   | LeftTerm (TermF x)
   | RightTerm (TermF x)
   | PairTerm (TermF x) (TermF x)
@@ -322,8 +352,6 @@ substTerm sigma (VarTerm x) = Map.lookup x sigma # fromMaybe (VarTerm x)
 
 substTerm _sigma (LiteralTerm s dty) = LiteralTerm s dty
 
-substTerm sigma (ConTerm s t) = ConTerm s (substTerm sigma t)
-
 substTerm _sigma UnitTerm = UnitTerm
 
 substTerm sigma (LeftTerm t) = LeftTerm (substTerm sigma t)
@@ -334,10 +362,10 @@ substTerm sigma (PairTerm s t) = PairTerm (substTerm sigma s) (substTerm sigma t
 
 substTerm sigma (SetTerm ts) = SetTerm (ts <#> substTerm sigma)
 
-freshName :: Unit -> Name
-freshName _ =
+freshenName :: Name -> Name
+freshenName (Name s _) =
   unsafePerformEffect do
-    n <- freshNameIndexRef # Ref.read # map (\i -> wrap ("♯" <> show i))
+    n <- freshNameIndexRef # Ref.read # map (\i -> Name s i)
     freshNameIndexRef # Ref.modify_ (_ + 1)
     pure n
 
@@ -355,19 +383,25 @@ freshNameIndexRef =
 type LatticeOrdering
   = Ordering /\ TermSubst
 
-newtype Name
-  = Name String
+data Name
+  = Name String Int
 
-derive instance _Newtype_Name :: Newtype Name _
+derive instance _Generic_Name :: Generic Name _
 
-derive newtype instance _Eq_Name :: Eq Name
+instance _Eq_Name :: Eq Name where
+  eq = genericEq
 
-derive newtype instance _Ord_Name :: Ord Name
+instance _Ord_Name :: Ord Name where
+  compare = genericCompare
 
-derive newtype instance _Show_Name :: Show Name
+instance _Eq_Show :: Show Name where
+  show = genericShow
+
+staticName :: String -> Name
+staticName s = Name s 0
 
 mainModuleName :: Name
-mainModuleName = Name "Main"
+mainModuleName = staticName "Main"
 
 --  Utilities for defining external functions
 getValidatedArg ::
@@ -390,3 +424,17 @@ getValidatedArg { f, x, dt, dt_name, fromString } args =
 
 throwExternalFunctionCallError :: forall a. String -> String -> Either String a
 throwExternalFunctionCallError f msg = throwError $ "when calling external function " <> f <> ", " <> msg
+
+-- | For each variable name in `f`, maps it to a fresh version of that name.
+freshenNames :: forall f. Traversable f => f Name -> f Name
+freshenNames = traverse f >>> flip evalState Map.empty
+  where
+  f x = do
+    sigma <- get
+    case Map.lookup x sigma of
+      Nothing -> do
+        let
+          y = freshenName x
+        modify_ (Map.insert x y)
+        pure y
+      Just y -> pure y

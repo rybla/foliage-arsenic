@@ -164,7 +164,7 @@ instance _Render_Prim :: Render Prim where
   render (Prim s) = HH.div [ Style.style $ [ "color: purple" ] ] [ HH.text s ] # pure
 
 instance _Render_Name :: Render Name where
-  render name = HH.div [ Style.style $ [ "color: darkgreen" ] ] [ HH.text (unwrap name) ] # pure
+  render (Name s _) = HH.div [ Style.style $ [ "color: darkgreen" ] ] [ HH.text s ] # pure
 
 instance _Render_Hypothesis :: Render Hypothesis where
   render (Hypothesis prop sides) = line (prop ⊕ []) ⊕ (sides # map (render >>> line) # Array.fold) ⊕ []
@@ -180,7 +180,6 @@ instance _Render_Term :: Render Term where
   render = case _ of
     VarTerm x -> x ⊕ []
     LiteralTerm l _ -> Lit l ⊕ []
-    ConTerm c t -> Punc "(" ⊕ Prim c ⊕ t ⊕ Punc ")" ⊕ []
     UnitTerm -> Prim "●" ⊕ []
     LeftTerm t -> Punc "(" ⊕ Prim "Left" ⊕ t ⊕ Punc ")" ⊕ []
     RightTerm t -> Punc "(" ⊕ Prim "Right" ⊕ t ⊕ Punc ")" ⊕ []

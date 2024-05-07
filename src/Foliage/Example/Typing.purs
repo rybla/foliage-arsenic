@@ -60,7 +60,7 @@ name =
   , "Parsed": "Parsed"
   }
     # homogeneous
-    # map Name
+    # map staticName
     # fromHomogeneous
     # Record.merge Library.name
 
@@ -121,7 +121,7 @@ make_typing :: String -> Lazy Program
 make_typing label =
   Lazy.defer \_ ->
     Program
-      { name: Name ("Typing . " <> label)
+      { name: staticName ("Typing . " <> label)
       , doc: Nothing
       , modules:
           Map.singleton mainModuleName
@@ -171,23 +171,23 @@ make_typing label =
                       # Map.union Library.functionDefs
                 , rules:
                     [ let
-                        ctx = Name "ctx"
+                        ctx = staticName "ctx"
 
-                        α = Name "α"
+                        α = staticName "α"
 
-                        β = Name "β"
+                        β = staticName "β"
 
-                        b = Name "b"
+                        b = staticName "b"
 
-                        i0 = Name "i0"
+                        i0 = staticName "i0"
 
-                        i1 = Name "i1"
+                        i1 = staticName "i1"
 
-                        i2 = Name "i2"
+                        i2 = staticName "i2"
 
-                        i3 = Name "i3"
+                        i3 = staticName "i3"
                       in
-                        Name "lam"
+                        staticName "lam"
                           /\ Rule
                               { hypotheses:
                                   [ Hypothesis
@@ -204,17 +204,17 @@ make_typing label =
                                   -- Γ ⊢ lam x α b : a -> b | i0 -> i3
                                   typed (lamTerm (VarTerm b)) (VarTerm i0) (VarTerm i3) (VarTerm ctx) (arrowType (VarTerm α) (VarTerm β))
                               }
-                    , Name "var #0"
+                    , staticName "var #0"
                         /\ let
-                            x = Name "x"
+                            x = staticName "x"
 
-                            i0 = Name "i0"
+                            i0 = staticName "i0"
 
-                            i1 = Name "i1"
+                            i1 = staticName "i1"
 
-                            ctx = Name "ctx"
+                            ctx = staticName "ctx"
 
-                            α = Name "α"
+                            α = staticName "α"
                           in
                             Rule
                               { hypotheses: empty
@@ -223,8 +223,8 @@ make_typing label =
                                   typed (varTerm (LiteralTerm (show 0) dtyInt)) (VarTerm i0) (VarTerm i1) (extendContext (VarTerm α) (VarTerm ctx)) (VarTerm α)
                               }
                     -- input parsed term: lam (lam #1)
-                    , Name "lam | 1 -> 4" /\ Rule { hypotheses: empty, conclusion: parsed (lamTerm (varTerm (LiteralTerm (show 0) dtyInt))) (LiteralTerm (show 1) dtyInt) (LiteralTerm (show 4) dtyInt) }
-                    , Name "#0 | 2 -> 3" /\ Rule { hypotheses: empty, conclusion: parsed (varTerm (LiteralTerm (show 0) dtyInt)) (LiteralTerm (show 2) dtyInt) (LiteralTerm (show 3) dtyInt) }
+                    , staticName "lam | 1 -> 4" /\ Rule { hypotheses: empty, conclusion: parsed (lamTerm (varTerm (LiteralTerm (show 0) dtyInt))) (LiteralTerm (show 1) dtyInt) (LiteralTerm (show 4) dtyInt) }
+                    , staticName "#0 | 2 -> 3" /\ Rule { hypotheses: empty, conclusion: parsed (varTerm (LiteralTerm (show 0) dtyInt)) (LiteralTerm (show 2) dtyInt) (LiteralTerm (show 3) dtyInt) }
                     ]
                       # Map.fromFoldable
                       # Map.union Library.rules

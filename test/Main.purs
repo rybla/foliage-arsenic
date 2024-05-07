@@ -55,15 +55,15 @@ test_comparisons =
                 Right (Right (o /\ sigma)) -> Just o
       shouldEqual
         ( compareProp
-            (Prop (Name "P") (PairTerm (PairTerm (LiteralTerm "0" intDty) (LiteralTerm "0" intDty)) (LiteralTerm "1" intDty)))
-            (Prop (Name "P") (PairTerm (PairTerm (LiteralTerm "0" intDty) (LiteralTerm "0" intDty)) (LiteralTerm "0" intDty)))
+            (Prop (staticName "P") (PairTerm (PairTerm (LiteralTerm "0" intDty) (LiteralTerm "0" intDty)) (LiteralTerm "1" intDty)))
+            (Prop (staticName "P") (PairTerm (PairTerm (LiteralTerm "0" intDty) (LiteralTerm "0" intDty)) (LiteralTerm "0" intDty)))
             # eval
         )
         (Just LT)
       shouldEqual
         ( compareProp
-            (Prop (Name "P") (PairTerm (PairTerm (LiteralTerm "0" intDty) (LiteralTerm "0" intDty)) (LiteralTerm "0" intDty)))
-            (Prop (Name "P") (PairTerm (PairTerm (LiteralTerm "0" intDty) (LiteralTerm "0" intDty)) (LiteralTerm "1" intDty)))
+            (Prop (staticName "P") (PairTerm (PairTerm (LiteralTerm "0" intDty) (LiteralTerm "0" intDty)) (LiteralTerm "0" intDty)))
+            (Prop (staticName "P") (PairTerm (PairTerm (LiteralTerm "0" intDty) (LiteralTerm "0" intDty)) (LiteralTerm "1" intDty)))
             # eval
         )
         (Just GT)
@@ -72,7 +72,7 @@ test_comparisons =
 
   mainModule =
     Module
-      { name: Name "Main"
+      { name: staticName "Main"
       , doc: Nothing
       , initialGas: 0
       , dataTypeDefs: Map.fromFoldable []
@@ -89,16 +89,16 @@ test_comparisons =
 
   lex = ProductLatticeType FirstThenSecond_ProductLatticeTypeOrdering
 
-  intDty = NamedDataType (Name "Int")
+  intDty = NamedDataType (staticName "Int")
 
-  intLty = NamedLatticeType (Name "Int")
+  intLty = NamedLatticeType (staticName "Int")
 
   name =
     { int: "Int"
     , p: "P"
     }
       # homogeneous
-      # map Name
+      # map staticName
 
   compare =
     { "Int":

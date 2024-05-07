@@ -1,12 +1,13 @@
 module Foliage.App.Editor.Component where
 
 import Prelude
-import Data.Tuple.Nested ((/\))
+
 import Control.Monad.State (get, modify_)
 import Data.Array as Array
 import Data.Lazy as Lazy
 import Data.Map as Map
 import Data.Maybe (Maybe(..), fromMaybe)
+import Data.Tuple.Nested ((/\))
 import Effect.Aff (Aff)
 import Effect.Class.Console as Console
 import Foliage.App.ComponentLibrary.DropdownMenu as DropdownMenu
@@ -52,7 +53,7 @@ component = mkComponent { initialState, eval, render }
         input.program
           # fromMaybe
               ( Program
-                  { name: Name "Main"
+                  { name: mainModuleName
                   , doc: Nothing
                   , modules:
                       Map.singleton mainModuleName

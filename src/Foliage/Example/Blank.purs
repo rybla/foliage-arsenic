@@ -1,7 +1,6 @@
 module Foliage.Example.Blank where
 
 import Foliage.Program
-
 import Data.Lazy (Lazy)
 import Data.Lazy as Lazy
 import Data.Map as Map
@@ -11,7 +10,7 @@ blank :: Lazy Program
 blank =
   Lazy.defer \_ ->
     Program
-      { name: Name "Blank"
+      { name: staticName "Blank"
       , doc: Nothing
       , modules:
           Map.singleton mainModuleName

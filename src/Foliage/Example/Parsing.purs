@@ -25,6 +25,7 @@ import Foliage.Common (Exc(..), Opaque(..), _error)
 import Foliage.Example.Library as Library
 import Prelude as Prelude
 import Type.Proxy (Proxy(..))
+import Unsafe (todo)
 import Unsafe as Unsafe
 
 --------------------------------------------------------------------------------
@@ -116,14 +117,14 @@ name =
   , "joinStrings": "joinStrings"
   }
     # homogeneous
-    # map Name
+    # map staticName
     # fromHomogeneous
 
-from_StringList :: Term -> Either String (List String)
-from_StringList = case _ of
-  ConTerm "cons" (PairTerm (LiteralTerm s (NamedDataType (Name "String"))) t) -> Cons s <$> from_StringList t
-  ConTerm "nil" UnitTerm -> pure mempty
-  _ -> throwError "invalid"
+-- from_StringList :: Term -> Either String (List String)
+-- from_StringList = case _ of
+--   ConTerm "cons" (PairTerm (LiteralTerm s (NamedDataType (Name "String" _))) t) -> Cons s <$> from_StringList t
+--   ConTerm "nil" UnitTerm -> pure mempty
+--   _ -> throwError "invalid"
 
 function ::
   Record
@@ -135,7 +136,7 @@ function =
           strs <-
             args
               # Map.lookup "strs"
-              # maybe (throwError "did not find arg for parameter 'strs'") from_StringList
+              # maybe (throwError "did not find arg for parameter 'strs'") (todo "joinStringList" :: _ -> Either _ (List _))
               # map Array.fromFoldable
           if Array.length strs <= 2 then
             pure (LiteralTerm (String.joinWith "" strs) (NamedDataType name."String"))
@@ -185,7 +186,7 @@ make_parsing :: String -> Grammar -> Input -> Lazy Program
 make_parsing label grammar@(Grammar grammar_rules) input@(Input input_string) =
   Lazy.defer \_ ->
     Program
-      { name: Name ("Parsing . " <> label)
+      { name: staticName ("Parsing . " <> label)
       , doc:
           [ [ "This program implements a parser for the following context-free grammar:"
             , ""
@@ -266,13 +267,13 @@ compileGrammar :: Grammar -> Array (Name /\ Rule)
 compileGrammar (Grammar prods) =
   prods
     # Array.mapWithIndex \i (nt /\ rhs) ->
-        Name (nt <> "#" <> show i)
+        staticName (nt <> "#" <> show i)
           /\ let
-              make_index_var j = VarTerm (Name ("j" <> show j))
+              make_index_var j = VarTerm (staticName ("j" <> show j))
 
-              make_str_var j = VarTerm (Name ("s" <> show j))
+              make_str_var j = VarTerm (staticName ("s" <> show j))
 
-              res_var_name = Name "res"
+              res_var_name = staticName "res"
 
               res_var = VarTerm res_var_name
             in
@@ -291,7 +292,7 @@ compileGrammar (Grammar prods) =
                                             # (Array.mapWithIndex \k _ -> make_str_var k)
                                             -- # (\ts -> [ LiteralTerm "⟬" (NamedDataType name."String") ] <> ts <> [ LiteralTerm "⟭" (NamedDataType name."String") ])
                                             
-                                            # Array.foldr (\h t -> ConTerm "cons" (h `pair` t)) (ConTerm "nil" UnitTerm)
+                                            # todo "Array.foldr (\\h t -> ConTerm \"cons\" (h `pair` t)) (ConTerm \"nil\" UnitTerm)"
                                         ]
                                     }
                                 ]
@@ -309,7 +310,7 @@ compileInput :: Input -> Array (Name /\ Rule)
 compileInput (Input ss) =
   ss
     # Array.mapWithIndex \i s ->
-        (Name (s <> "#" <> show i))
+        (staticName (s <> "#" <> show i))
           /\ Rule
               { hypotheses: mempty
               , conclusion: parse s (LiteralTerm s (NamedDataType name."String")) (LiteralTerm (show i) (NamedDataType name."Int")) (LiteralTerm (show (i + 1)) (NamedDataType name."Int"))
