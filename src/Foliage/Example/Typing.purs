@@ -15,7 +15,7 @@ import Data.Map as Map
 import Data.Maybe (Maybe(..))
 import Data.Tuple.Nested (type (/\), (/\))
 import Foliage.Common (Exc, Opaque(..), Html)
-import Foliage.Example.Library (pair, prod12, sumLIR, termUnit)
+import Foliage.Example.Library (pair, prod12, sumLir, termUnit)
 import Foliage.Example.Library as Library
 import Halogen.HTML as HH
 import Partial.Unsafe (unsafeCrashWith)
@@ -124,19 +124,19 @@ make_typing label =
                     [ name."Type"
                         /\ LatticeTypeDef
                             ( (ltySymbol {- arrow -} `prod12` (ltyType `prod12` ltyType))
-                                `sumLIR`
+                                `sumLir`
                                   (ltySymbol {- unit -})
                             )
                     , name."Term"
                         /\ LatticeTypeDef
                             ( (ltySymbol {- lam -} `prod12` ltyTerm)
-                                `sumLIR`
+                                `sumLir`
                                   (ltySymbol {- var -} `prod12` ltyVar)
                             )
                     , name."Context"
                         /\ LatticeTypeDef
                             ( ltySymbol {- extend -} `prod12` (ltyType `prod12` ltyContext)
-                                `sumLIR`
+                                `sumLir`
                                   ltySymbol {- empty -}
                             )
                     , name."Var" /\ LatticeTypeDef ltyIndex

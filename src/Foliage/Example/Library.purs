@@ -122,8 +122,17 @@ relations = empty
 rules :: Map FixedName Rule
 rules = empty
 
-sumLIR :: LatticeType -> LatticeType -> LatticeType
-sumLIR = SumLatticeType LeftIncomparableRight_SumLatticeTypeOrdering
+sumLir :: LatticeType -> LatticeType -> LatticeType
+sumLir = SumLatticeType LeftIncomparableRight_SumLatticeTypeOrdering
+
+sumLgtr :: LatticeType -> LatticeType -> LatticeType
+sumLgtr = SumLatticeType LeftGreaterThanRight_SumLatticeTypeOrdering
+
+sumLltr :: LatticeType -> LatticeType -> LatticeType
+sumLltr = SumLatticeType LeftLessThanRight_SumLatticeTypeOrdering
+
+sumLeqr :: LatticeType -> LatticeType -> LatticeType
+sumLeqr = SumLatticeType LeftEqualRight_SumLatticeTypeOrdering
 
 left :: Term -> Term
 left = LeftTerm

@@ -696,6 +696,7 @@ instance _Render_Prop :: Render Prop where
 instance _Render_Term :: Render Term where
   render = case _ of
     VarTerm x -> x ⊕ mempty
+    LiteralTerm l (NamedDataType (FixedName "String")) -> Lit (show l) ⊕ mempty
     LiteralTerm l _ -> Lit l ⊕ mempty
     UnitTerm -> Prim "●" ⊕ mempty
     LeftTerm t -> Punc "(" ⊕ Prim "☜" ⊕ t ⊕ Punc ")" ⊕ mempty

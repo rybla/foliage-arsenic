@@ -2,6 +2,7 @@ module Foliage.Example.Parsing where
 
 import Foliage.Program
 import Prelude
+
 import Control.Monad.Error.Class (throwError)
 import Control.Monad.Except (ExceptT)
 import Control.Plus (empty)
@@ -22,7 +23,7 @@ import Data.String.CodeUnits as CodeUnits
 import Data.String.CodeUnits as String.CodeUnits
 import Data.Tuple.Nested (type (/\), (/\))
 import Foliage.Common (Exc(..), Htmls, Opaque(..), Html, _error)
-import Foliage.Example.Library (left, ltyUnit, pair, prod12, right, sumLIR, termUnit)
+import Foliage.Example.Library (left, ltyUnit, pair, prod12, right, sumLgtr, sumLir, sumLltr, termUnit)
 import Foliage.Example.Library as Library
 import Halogen.HTML as HH
 import Partial.Unsafe (unsafeCrashWith)
@@ -38,15 +39,25 @@ nat :: Lazy Program
 nat =
   Lazy.defer \_ ->
     let
+      doc =
+        [ [ "This program implements a parser for the following context-free grammar:"
+          , ""
+          , "  N → Z"
+          , "  N → SN"
+          , ""
+          , "The input string is: "
+          , ""
+          , "    " <> (input # Array.intercalate "")
+          , ""
+          ]
+        ]
+          # Array.concat
+          # Array.intercalate "\n"
+
       input :: Array String
       input = [ "S", "S", "Z" ]
 
-      parse :: Term -> Term -> Term -> Prop
-      parse ast i j = Prop name."Parse" (ast `pair` (i `pair` j))
-
-      latticeTypeDefs =
-        [ name."Ast" /\ LatticeTypeDef (ltyAst `sumLIR` ltyUnit)
-        ]
+      latticeTypeDefs = [ name."Ast" /\ LatticeTypeDef (ltyAst `sumLir` ltyUnit) ]
 
       renderAst :: Term -> RenderM Htmls
       renderAst = case _ of
@@ -90,12 +101,88 @@ nat =
                   }
         ]
     in
-      make_example { input, latticeTypeDefs, renderAst, rules }
+      make_example { doc, input, latticeTypeDefs, renderAst, rules }
+
+assoc :: Lazy Program
+assoc =
+  Lazy.defer \_ ->
+    let
+      doc =
+        [ [ "This program implements a parser for the following context-free grammar:"
+          , ""
+          , "  E → x"
+          , "  E → E + E"
+          , ""
+          , "The input string is: "
+          , ""
+          , "    " <> (input # Array.intercalate "")
+          , ""
+          ]
+        ]
+          # Array.concat
+          # Array.intercalate "\n"
+
+      input :: Array String
+      input = "x+x+x" # CodeUnits.toCharArray # map (pure >>> CodeUnits.fromCharArray)
+
+      -- latticeTypeDefs = [ name."Ast" /\ LatticeTypeDef ((ltyAst `prod12` ltyAst) `sumLir` ltyUnit) ]
+      -- latticeTypeDefs = [ name."Ast" /\ LatticeTypeDef ((ltyAst `prod12` ltyAst) `sumLgtr` ltyUnit) ]
+      latticeTypeDefs = [ name."Ast" /\ LatticeTypeDef ((ltyAst `prod12` ltyAst) `sumLltr` ltyUnit) ]
+
+      renderAst :: Term -> RenderM Htmls
+      renderAst = case _ of
+        LeftTerm (PairTerm l r) -> [ HH.text "(" :: Html ] ⊕ renderAst l ⊕ [ HH.text "+" :: Html ] ⊕ renderAst r ⊕ [ HH.text ")" :: Html ] ⊕ mempty
+        RightTerm _ -> [ HH.text "x" :: Html ] ⊕ mempty
+        t -> render t
+
+      rules =
+        [ let
+            i0 = newVarName "i0"
+
+            i1 = newVarName "i1"
+          in
+            FixedName "x"
+              /\ Rule
+                  { hypotheses:
+                      [ Hypothesis (token (LiteralTerm "x" dtyString) (VarTerm i0) (VarTerm i1)) []
+                      ]
+                        # List.fromFoldable
+                  , conclusion:
+                      parse (right termUnit) (VarTerm i0) (VarTerm i1)
+                  }
+        , let
+            l = newVarName "l"
+
+            r = newVarName "r"
+
+            i0 = newVarName "i0"
+
+            i1 = newVarName "i1"
+
+            i2 = newVarName "i2"
+
+            i3 = newVarName "i3"
+          in
+            FixedName "E + E"
+              /\ Rule
+                  { hypotheses:
+                      [ Hypothesis (parse (VarTerm l) (VarTerm i0) (VarTerm i1)) []
+                      , Hypothesis (token (LiteralTerm "+" dtyString) (VarTerm i1) (VarTerm i2)) []
+                      , Hypothesis (parse (VarTerm r) (VarTerm i2) (VarTerm i3)) []
+                      ]
+                        # List.fromFoldable
+                  , conclusion:
+                      parse (left (VarTerm l `pair` VarTerm r)) (VarTerm i0) (VarTerm i3)
+                  }
+        ]
+    in
+      make_example { doc, input, latticeTypeDefs, renderAst, rules }
 
 make_example ::
   forall a.
   Render a =>
-  { input :: Array String
+  { doc :: String
+  , input :: Array String
   , latticeTypeDefs :: Array (FixedName /\ LatticeTypeDef)
   , renderAst :: Term -> a
   , rules :: Array (FixedName /\ Rule)
@@ -104,21 +191,7 @@ make_example ::
 make_example spec =
   Program
     { name: FixedName ("Parsing . Nat")
-    , doc:
-        [ [ "This program implements a parser for the following context-free grammar:"
-          , ""
-          , "  N → Z"
-          , "  N → SN"
-          , ""
-          , "The input string is: "
-          , ""
-          , "    " <> (spec.input # Array.intercalate "")
-          , ""
-          ]
-        ]
-          # Array.concat
-          # Array.intercalate "\n"
-          # Just
+    , doc: spec.doc # Just
     , modules:
         Map.singleton mainModuleName
           ( Module
@@ -255,29 +328,29 @@ latticeTypeDef_Symbol = name."Symbol" /\ LatticeTypeDef (DiscreteLatticeType lty
 relation_Token =
   name."Token"
     /\ Relation
-        { domain: ltySymbol `prod12` (ltyIndex `prod12` ltyIndex)
+        { domain: (ltyIndex `prod12` ltyIndex) `prod12` ltySymbol
         , render:
             case _ of
-              PairTerm s (PairTerm i0 i1) -> do
+              PairTerm (PairTerm i0 i1) s -> do
                 i0 <- i0 # render
                 i1 <- i1 # render
                 [ HH.sub_ i0 :: Html ] ⊕ s ⊕ [ HH.sub_ i1 :: Html ] ⊕ mempty
               t -> unsafeCrashWith ("invalid Token term: " <> show t)
-        , canonical_term: VarTerm (newVarName "s") `pair` (VarTerm (newVarName "i0") `pair` VarTerm (newVarName "i1"))
+        , canonical_term: (VarTerm (newVarName "i0") `pair` VarTerm (newVarName "i1")) `pair` VarTerm (newVarName "s")
         }
 
 relation_Parse renderAst =
   name."Parse"
     /\ Relation
-        { domain: ltyAst `prod12` (ltyIndex `prod12` ltyIndex)
+        { domain: (ltyIndex `prod12` ltyIndex) `prod12` ltyAst
         , render:
             case _ of
-              PairTerm ast (PairTerm i0 i1) -> do
+              PairTerm (PairTerm i0 i1) ast -> do
                 i0 <- i0 # render
                 i1 <- i1 # render
                 [ HH.sub_ i0 :: Html ] ⊕ renderAst ast ⊕ [ HH.sub_ i1 :: Html ] ⊕ mempty
               t -> unsafeCrashWith ("invalid Parse term: " <> show t)
-        , canonical_term: VarTerm (newVarName "ast") `pair` (VarTerm (newVarName "i0") `pair` VarTerm (newVarName "i1"))
+        , canonical_term: (VarTerm (newVarName "i0") `pair` VarTerm (newVarName "i1")) `pair` VarTerm (newVarName "ast")
         }
 
 compileInput :: Array String -> Array (FixedName /\ Rule)
@@ -291,7 +364,10 @@ compileInput ss =
               }
 
 token :: Term -> Term -> Term -> Prop
-token str i j = Prop name."Token" (str `pair` (i `pair` j))
+token str i j = Prop name."Token" ((i `pair` j) `pair` str)
+
+parse :: Term -> Term -> Term -> Prop
+parse ast i j = Prop name."Parse" ((i `pair` j) `pair` ast)
 
 -- --------------------------------------------------------------------------------
 -- -- Examples
@@ -473,7 +549,7 @@ token str i j = Prop name."Token" (str `pair` (i `pair` j))
 --                     , name."Ast"
 --                         /\ LatticeTypeDef
 --                             ( ?a
---                                 `sumLIR`
+--                                 `sumLir`
 --                                   ?a
 --                             )
 --                     ]

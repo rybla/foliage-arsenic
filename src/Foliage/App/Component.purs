@@ -1,6 +1,7 @@
 module Foliage.App.Component where
 
 import Prelude
+
 import Control.Monad.Except (runExceptT)
 import Control.Monad.Trans.Class (lift)
 import Control.Monad.Writer (runWriterT)
@@ -28,7 +29,8 @@ import Unsafe as Unsafe
 
 -- default_program = Example.Dijkstra.diamond
 -- default_program = Example.Typing.test
-default_program = Example.Parsing.nat
+-- default_program = Example.Parsing.nat
+default_program = Example.Parsing.assoc
 
 data Action
   = EditorOutput Editor.Component.Output
