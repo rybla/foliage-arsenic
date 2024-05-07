@@ -58,18 +58,7 @@ cycle =
 --------------------------------------------------------------------------------
 -- Definitions
 --------------------------------------------------------------------------------
-name ::
-  Homogeneous
-    ( addWeight :: Void
-    , append_edge_distance :: Void
-    , dist :: Void
-    , edge :: Void
-    , edge_distance :: Void
-    , int :: Void
-    , node :: Void
-    , weight :: Void
-    )
-    Name
+name :: Homogeneous _ FixedName
 name =
   { int: "Int"
   , node: "Node"
@@ -81,7 +70,7 @@ name =
   , append_edge_distance: "AppendEdgeDistance"
   }
     # homogeneous
-    # map staticName
+    # map FixedName
 
 function ::
   Homogeneous
@@ -104,7 +93,7 @@ compare ::
   Homogeneous
     ( "Int" :: Void
     )
-    (Opaque "compare" (Tuple Term Term -> ExceptT (Exc "error") (ExceptT (Exc "compare") Identity) (Ordering /\ Map Name Term)))
+    (Opaque "compare" (Tuple Term Term -> ExceptT (Exc "error") (ExceptT (Exc "compare") Identity) (Ordering /\ Map VarName Term)))
 compare =
   { "Int":
       case _ of
@@ -125,7 +114,7 @@ make_dijkstra label graph =
       lex = ProductLatticeType FirstThenSecond_ProductLatticeTypeOrdering
     in
       Program
-        { name: staticName ("Dijstra . " <> label)
+        { name: FixedName ("Dijstra . " <> label)
         , doc:
             """
 This program implements Dijstra's algorithm for computing the shortest path in a graph from a starting node to any other node in the graph.
@@ -179,7 +168,7 @@ This program implements Dijstra's algorithm for computing the shortest path in a
                                     }
                             , -} Tuple (name `Homo.get` _.append_edge_distance)
                                 let
-                                  { n1, n2, n3, w1, w2, w3 } = { n1: staticName "n1", n2: staticName "n2", n3: staticName "n3", w1: staticName "w1", w2: staticName "w2", w3: staticName "w3" }
+                                  { n1, n2, n3, w1, w2, w3 } = { n1: newVarName "n1", n2: newVarName "n2", n3: newVarName "n3", w1: newVarName "w1", w2: newVarName "w2", w3: newVarName "w3" }
                                 in
                                   Rule
                                     { hypotheses:
@@ -187,7 +176,7 @@ This program implements Dijstra's algorithm for computing the shortest path in a
                                           [ Hypothesis (Prop (name `Homo.get` _.dist) ((VarTerm n1 `PairTerm` VarTerm n2) `PairTerm` VarTerm w1)) []
                                           , Hypothesis (Prop (name `Homo.get` _.edge) ((VarTerm n2 `PairTerm` VarTerm n3) `PairTerm` VarTerm w2))
                                               [ FunctionSideHypothesis
-                                                  { resultVarName: w3
+                                                  { resultVarVarName: w3
                                                   , functionName: name `Homo.get` _.addWeight
                                                   , args: [ VarTerm w1, VarTerm w2 ]
                                                   }
@@ -216,10 +205,10 @@ This program implements Dijstra's algorithm for computing the shortest path in a
 data Graph
   = Graph { start_node :: Int, edges :: (Array ((Int /\ Int) /\ Int)) }
 
-compileGraph :: Graph -> Array (Name /\ Rule)
+compileGraph :: Graph -> Array (FixedName /\ Rule)
 compileGraph (Graph { start_node: n, edges: es }) =
   Array.cons
-    ( staticName (show n <> " <==> " <> show n)
+    ( FixedName (show n <> " <==> " <> show n)
         /\ Rule
             { hypotheses: Nil
             , conclusion: Prop (name `Homo.get` _.dist) ((LiteralTerm (show n) (NamedDataType (name `Homo.get` _.int)) `PairTerm` LiteralTerm (show n) (NamedDataType (name `Homo.get` _.int))) `PairTerm` LiteralTerm (show 0) (NamedDataType (name `Homo.get` _.int)))
@@ -228,7 +217,7 @@ compileGraph (Graph { start_node: n, edges: es }) =
     (es <#> f)
   where
   f ((n1 /\ n2) /\ w) =
-    (staticName (show n1 <> " -> " <> show n2))
+    (FixedName (show n1 <> " -> " <> show n2))
       /\ Rule
           { hypotheses: Nil
           , conclusion: Prop (name `Homo.get` _.edge) ((LiteralTerm (show n1) (NamedDataType (name `Homo.get` _.int)) `PairTerm` LiteralTerm (show n2) (NamedDataType (name `Homo.get` _.int))) `PairTerm` LiteralTerm (show w) (NamedDataType (name `Homo.get` _.int)))

@@ -44,7 +44,7 @@ module Foliage.InterpretationOld where
 
 -- newtype Ctx
 --   = Ctx
---   { modules :: Map Name Module
+--   { modules :: Map VarName Module
 --   , focusModule :: Module
 --   , rules :: Array Rule
 --   -- external function name => external function
@@ -187,7 +187,7 @@ module Foliage.InterpretationOld where
 --               function (Array.zip functionDef.inputs args # map (lmap fst) # Map.fromFoldable)
 --                 # either (\err -> throwError (Err { source: "processSideHypothesis", description: "error in function " <> show functionDef.name <> ": " <> err })) pure
 --             pure result
---       substRule (Map.singleton side.resultVarName result) rule # pure
+--       substRule (Map.singleton side.resultVarVarName result) rule # pure
 
 -- evaluateTerm ::
 --   forall m x y.
@@ -226,7 +226,7 @@ module Foliage.InterpretationOld where
 --   MonadThrow Err m =>
 --   MonadPlus m =>
 --   MonadTell (Array Log) m =>
---   Rule -> PropF Name -> m Rule
+--   Rule -> PropF VarName -> m Rule
 -- applyRuleToProp rule@(Rule { hypotheses, conclusion }) prop = do
 --   -- Debug.traceM $ "trying to apply rule " <> show rule <> " to prop " <> show prop
 --   case hypotheses of
@@ -252,7 +252,7 @@ module Foliage.InterpretationOld where
 --   m
 --     ( List
 --         { prop :: Prop
---         , sigma :: Map Name (TermF Name)
+--         , sigma :: Map VarName (TermF VarName)
 --         }
 --     )
 -- deriveProp prop = do
@@ -340,8 +340,8 @@ module Foliage.InterpretationOld where
 -- compareTerm _lty (VarTerm x1) (VarTerm x2) =
 --   EQ
 --     /\ ( Map.fromFoldable
---           [ x1 /\ VarTerm (freshName unit)
---           , x2 /\ VarTerm (freshName unit)
+--           [ x1 /\ VarTerm (freshVarName unit)
+--           , x2 /\ VarTerm (freshVarName unit)
 --           ]
 --       )
 --     # pure

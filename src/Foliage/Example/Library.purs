@@ -1,7 +1,7 @@
 module Foliage.Example.Library where
 
 import Prelude
-
+import Foliage.Program
 import Control.Monad.Error.Class (throwError)
 import Control.Plus (empty)
 import Data.Array as Array
@@ -15,7 +15,6 @@ import Data.Maybe (Maybe, maybe)
 import Data.String as String
 import Data.Tuple.Nested ((/\))
 import Foliage.Common (Exc(..), Opaque(..), _error)
-import Foliage.Program (DataType(..), DataTypeDef(..), FunctionDef(..), LatticeType(..), LatticeTypeDef(..), Name(..), ProductLatticeTypeOrdering(..), Relation, Rule, SumLatticeTypeOrdering(..), Term, TermF(..))
 import Prelude as Prelude
 import Type.Proxy (Proxy(..))
 import Unsafe (todo)
@@ -35,15 +34,14 @@ name =
   -- relation
   }
     # homogeneous
-    # map (\s -> Name s 0)
+    # map FixedName
     # fromHomogeneous
 
 -- from_StringList :: Term -> Either String (List String)
 -- from_StringList = case _ of
---   ConTerm "cons" (PairTerm (LiteralTerm s (NamedDataType (Name "String" _))) t) -> Cons s <$> from_StringList t
+--   ConTerm "cons" (PairTerm (LiteralTerm s (NamedDataType (VarName "String" _))) t) -> Cons s <$> from_StringList t
 --   ConTerm "nil" UnitTerm -> pure mempty
 --   _ -> throwError "invalid"
-
 function :: Record _
 function =
   ( { "joinStrings":
@@ -52,6 +50,7 @@ function =
             args
               # Map.lookup "strs"
               -- # maybe (throwError "did not find arg for parameter 'strs'") from_StringList
+              
               # (todo "joinStrings" :: Maybe _ -> Either String (List _))
               # map Array.fromFoldable
           if Array.length strs <= 2 then
@@ -68,7 +67,7 @@ function =
   )
     # fromHomogeneous
 
-dataTypeDefs :: Map Name DataTypeDef
+dataTypeDefs :: Map FixedName DataTypeDef
 dataTypeDefs =
   [ name."Int" /\ ExternalDataTypeDef "Int"
   , name."String" /\ ExternalDataTypeDef "String"
@@ -76,7 +75,7 @@ dataTypeDefs =
   ]
     # Map.fromFoldable
 
-latticeTypeDefs :: Map Name LatticeTypeDef
+latticeTypeDefs :: Map FixedName LatticeTypeDef
 latticeTypeDefs =
   [ name."Int"
       /\ ExternalLatticeTypeDef
@@ -105,7 +104,7 @@ latticeTypeDefs =
   ]
     # Map.fromFoldable
 
-functionDefs :: Map Name FunctionDef
+functionDefs :: Map FixedName FunctionDef
 functionDefs =
   [ name."joinStrings"
       /\ ExternalFunctionDef
@@ -117,10 +116,10 @@ functionDefs =
   ]
     # Map.fromFoldable
 
-relations :: Map Name Relation
+relations :: Map FixedName Relation
 relations = empty
 
-rules :: Map Name Rule
+rules :: Map FixedName Rule
 rules = empty
 
 sumLIR :: LatticeType -> LatticeType -> LatticeType

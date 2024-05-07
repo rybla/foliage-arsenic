@@ -1,6 +1,7 @@
 module Foliage.Program where
 
 import Prelude
+
 import Control.Bind (bindFlipped)
 import Control.Monad.Error.Class (throwError)
 import Control.Monad.Except (ExceptT, Except)
@@ -13,6 +14,7 @@ import Data.List (List(..), (:))
 import Data.Map (Map)
 import Data.Map as Map
 import Data.Maybe (Maybe(..), fromMaybe, maybe)
+import Data.Newtype (class Newtype)
 import Data.Ord.Generic (genericCompare)
 import Data.Show.Generic (genericShow)
 import Data.Traversable (class Traversable, traverse)
@@ -25,9 +27,9 @@ import Record as Record
 
 data Program
   = Program
-    { name :: Name
+    { name :: FixedName
     , doc :: Maybe String
-    , modules :: Map Name Module
+    , modules :: Map FixedName Module
     }
 
 derive instance _Generic_Program :: Generic Program _
@@ -42,14 +44,14 @@ lookupModule label k = (\(Module mod) -> mod) >>> Record.get label >>> Map.looku
 
 data Module
   = Module
-    { name :: Name
+    { name :: FixedName
     , doc :: Maybe String
     , initialGas :: Int
-    , dataTypeDefs :: Map Name DataTypeDef
-    , latticeTypeDefs :: Map Name LatticeTypeDef
-    , functionDefs :: Map Name FunctionDef
-    , relations :: Map Name Relation
-    , rules :: Map Name Rule
+    , dataTypeDefs :: Map FixedName DataTypeDef
+    , latticeTypeDefs :: Map FixedName LatticeTypeDef
+    , functionDefs :: Map FixedName FunctionDef
+    , relations :: Map FixedName Relation
+    , rules :: Map FixedName Rule
     }
 
 derive instance _Generic_Module :: Generic Module _
@@ -74,7 +76,7 @@ instance _Show_DataTypeDef :: Show DataTypeDef where
 
 data DataType
   = UnitDataType
-  | NamedDataType Name
+  | NamedDataType FixedName
   | SumDataType DataType DataType
   | ProductDataType DataType DataType
   | SetDataType DataType
@@ -103,7 +105,7 @@ instance _Show_LatticeTypeDef :: Show LatticeTypeDef where
   show x = genericShow x
 
 data LatticeType
-  = NamedLatticeType Name
+  = NamedLatticeType FixedName
   | UnitLatticeType
   | SumLatticeType SumLatticeTypeOrdering LatticeType LatticeType
   | ProductLatticeType ProductLatticeTypeOrdering LatticeType LatticeType
@@ -186,7 +188,7 @@ instance _Show_Relation :: Show Relation where
   show x = genericShow x
 
 type Rule
-  = RuleF Name
+  = RuleF VarName
 
 data RuleF x
   = Rule
@@ -209,7 +211,7 @@ instance _Show_Rule :: Show Rule where
   show x = genericShow x
 
 type RipeRule
-  = RipeRuleF Name
+  = RipeRuleF VarName
 
 type RipeRuleF x
   = { hypothesis :: HypothesisF x, rule' :: RuleF x }
@@ -230,7 +232,7 @@ nextHypothesis (Rule rule) = case rule.hypotheses of
   Cons hypothesis hypotheses -> Right { hypothesis, rule': Rule rule { hypotheses = hypotheses } }
 
 type Hypothesis
-  = HypothesisF Name
+  = HypothesisF VarName
 
 data HypothesisF x
   = Hypothesis (PropF x) (Array (SideHypothesisF x))
@@ -254,12 +256,12 @@ substHypothesis sigma = case _ of
   Hypothesis prop sides -> Hypothesis (prop # substProp sigma) (sides <#> substSideHypothesis sigma)
 
 type SideHypothesis
-  = SideHypothesisF Name
+  = SideHypothesisF VarName
 
 data SideHypothesisF x
   = FunctionSideHypothesis
-    { resultVarName :: x
-    , functionName :: Name
+    { resultVarVarName :: x
+    , functionName :: FixedName
     , args :: Array (TermF x)
     }
 
@@ -282,13 +284,13 @@ substSideHypothesis sigma = case _ of
   FunctionSideHypothesis side -> FunctionSideHypothesis side { args = side.args <#> substTerm sigma }
 
 type Prop
-  = PropF Name
+  = PropF VarName
 
 type ConcreteProp
   = PropF Void
 
 data PropF x
-  = Prop Name (TermF x)
+  = Prop FixedName (TermF x)
 
 derive instance _Generic_PropF :: Generic (PropF x) _
 
@@ -305,7 +307,7 @@ instance _Show_PropF :: Show x => Show (PropF x) where
   show x = genericShow x
 
 type Term
-  = TermF Name
+  = TermF VarName
 
 data TermF x
   = VarTerm x
@@ -331,7 +333,7 @@ instance _Show_Term :: Show x => Show (TermF x) where
   show x = genericShow x
 
 type TermSubst
-  = Map Name Term
+  = Map VarName Term
 
 substRule :: TermSubst -> Rule -> Rule
 substRule sigma (Rule rule) =
@@ -362,15 +364,15 @@ substTerm sigma (PairTerm s t) = PairTerm (substTerm sigma s) (substTerm sigma t
 
 substTerm sigma (SetTerm ts) = SetTerm (ts <#> substTerm sigma)
 
-freshenName :: Name -> Name
-freshenName (Name s _) =
+freshenVarName :: VarName -> VarName
+freshenVarName (VarName s _) =
   unsafePerformEffect do
-    n <- freshNameIndexRef # Ref.read # map (\i -> Name s i)
-    freshNameIndexRef # Ref.modify_ (_ + 1)
+    n <- freshVarNameIndexRef # Ref.read # map (\i -> VarName s i)
+    freshVarNameIndexRef # Ref.modify_ (_ + 1)
     pure n
 
-freshNameIndexRef :: Ref Int
-freshNameIndexRef =
+freshVarNameIndexRef :: Ref Int
+freshVarNameIndexRef =
   unsafePerformEffect do
     0 # Ref.new
 
@@ -383,25 +385,36 @@ freshNameIndexRef =
 type LatticeOrdering
   = Ordering /\ TermSubst
 
-data Name
-  = Name String Int
+data VarName
+  = VarName String Int
 
-derive instance _Generic_Name :: Generic Name _
+derive instance _Generic_VarName :: Generic VarName _
 
-instance _Eq_Name :: Eq Name where
+instance _Eq_VarName :: Eq VarName where
   eq = genericEq
 
-instance _Ord_Name :: Ord Name where
+instance _Ord_VarName :: Ord VarName where
   compare = genericCompare
 
-instance _Eq_Show :: Show Name where
+instance _Eq_Show :: Show VarName where
   show = genericShow
 
-staticName :: String -> Name
-staticName s = Name s 0
+newVarName :: String -> VarName
+newVarName s = VarName s 0
 
-mainModuleName :: Name
-mainModuleName = staticName "Main"
+newtype FixedName
+  = FixedName String
+
+derive instance _Newtype_FixedName :: Newtype FixedName _
+
+derive newtype instance _Eq_FixedName :: Eq FixedName
+
+derive newtype instance _Ord_FixedName :: Ord FixedName
+
+derive newtype instance _Show_FixedName :: Show FixedName
+
+mainModuleName :: FixedName
+mainModuleName = FixedName "Main"
 
 --  Utilities for defining external functions
 getValidatedArg ::
@@ -426,15 +439,15 @@ throwExternalFunctionCallError :: forall a. String -> String -> Either String a
 throwExternalFunctionCallError f msg = throwError $ "when calling external function " <> f <> ", " <> msg
 
 -- | For each variable name in `f`, maps it to a fresh version of that name.
-freshenNames :: forall f. Traversable f => f Name -> f Name
-freshenNames = traverse f >>> flip evalState Map.empty
+freshenVarNames :: forall f. Traversable f => f VarName -> f VarName
+freshenVarNames = traverse f >>> flip evalState Map.empty
   where
   f x = do
     sigma <- get
     case Map.lookup x sigma of
       Nothing -> do
         let
-          y = freshenName x
+          y = freshenVarName x
         modify_ (Map.insert x y)
         pure y
       Just y -> pure y

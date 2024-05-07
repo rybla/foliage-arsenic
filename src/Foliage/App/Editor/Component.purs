@@ -14,7 +14,7 @@ import Foliage.App.ComponentLibrary.DropdownMenu as DropdownMenu
 import Foliage.App.Rendering as Rendering
 import Foliage.App.Style as Style
 import Foliage.Example as Example
-import Foliage.Program (Module(..), Name(..), Program(..), mainModuleName)
+import Foliage.Program (Module(..), VarName(..), Program(..), mainModuleName)
 import Halogen (Component, defaultEval, mkComponent, mkEval)
 import Halogen as H
 import Halogen.HTML as HH

@@ -12,8 +12,8 @@ examples =
   [ "Blank" /\ Blank.blank
   , "Dijkstra . Diamond" /\ Dijkstra.diamond
   , "Dijkstra . Cycle" /\ Dijkstra.cycle
-  , "Parsing . ABC" /\ Parsing.abc
+  -- , "Parsing . ABC" /\ Parsing.abc
   , "Parsing . Nat" /\ Parsing.nat
-  , "Parsing . Binary Tree" /\ Parsing.binary_tree
-  , "Parsing . Ambiguous" /\ Parsing.ambiguous
+  -- , "Parsing . Binary Tree" /\ Parsing.binary_tree
+  -- , "Parsing . Ambiguous" /\ Parsing.ambiguous
   ]

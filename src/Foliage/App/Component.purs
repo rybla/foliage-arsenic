@@ -28,7 +28,8 @@ import Unsafe as Unsafe
 
 -- default_program = Example.Dijkstra.diamond
 -- default_program = Example.Parsing.nat
-default_program = Example.Typing.test
+-- default_program = Example.Typing.test
+default_program = Example.Parsing.nat
 
 data Action
   = EditorOutput Editor.Component.Output
@@ -80,7 +81,7 @@ component = mkComponent { initialState, eval, render }
         pure unit
 
   render state =
-    HH.div [ Style.style $ [ "width: 100%" ] ]
+    HH.div [ Style.style $ [ "width: 100%", "background-color: rgba(10, 43, 54, 0.5)" ] ]
       [ HH.div [ Style.style $ Style.padding_big <> Style.flex_column <> [ "align-items: center" ] ]
           [ HH.div [ Style.style $ [ "height: 2em" ] <> [ "vertical-align: center", "text-align: center" ] <> Style.font_fancy <> Style.underline ] [ HH.text "Foliage" ]
           , HH.div [ Style.style $ [ "width: calc(100vw - 2em)", "height: calc(100vh - 5em)" ] <> Style.flex_row <> [ "gap: 0" ] ]

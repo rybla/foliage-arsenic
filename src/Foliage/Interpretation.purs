@@ -37,7 +37,7 @@ import Unsafe as Unsafe
 --------------------------------------------------------------------------------
 newtype Ctx
   = Ctx
-  { modules :: Map Name Module
+  { modules :: Map FixedName Module
   , focusModule :: Module
   }
 
@@ -46,8 +46,8 @@ derive instance _Newtype_Ctx :: Newtype Ctx _
 newtype Env
   = Env
   { gas :: Int
-  , ripe_rules :: Map Name (List RipeRule) -- prop name => ripe rules that have a head hypothesis of the prop name
-  , known_props :: Map Name (List Prop) -- prop name => instance of prop
+  , ripe_rules :: Map FixedName (List RipeRule) -- prop name => ripe rules that have a head hypothesis of the prop name
+  , known_props :: Map FixedName (List Prop) -- prop name => instance of prop
   , active_props :: List { prop :: Prop, isNew :: Boolean }
   }
 
@@ -100,7 +100,7 @@ interpProgram (Program prog) = do
                     rule
                       # nextHypothesis
                       # case _ of
-                          Left conclusion -> Right { prop: conclusion, isNew: true }
+                          Left conclusion -> Right { prop: conclusion, isNew: false }
                           Right { hypothesis: hypothesis@(Hypothesis (Prop prop_name _) _), rule' } -> Left (Map.singleton prop_name (List.singleton { hypothesis, rule' }))
                 )
             # lmap List.fold
@@ -108,7 +108,7 @@ interpProgram (Program prog) = do
         Env
           { gas: main.initialGas
           , ripe_rules
-          , known_props: active_props # map (\{ prop: prop@(Prop prop_name _) } -> Map.singleton prop_name (List.singleton prop)) # Map.unions
+          , known_props: active_props # map (\{ prop: prop@(Prop prop_name _) } -> Map.singleton prop_name (List.singleton prop)) # List.foldr (Map.unionWith append) Map.empty
           , active_props
           }
   err_or_unit /\ env' <-
@@ -163,11 +163,13 @@ learnProp prop@(Prop prop_name _) = do
       tellLog { label: "learn prop . success", messages: [ "prop" /\ (prop # render # line # HH.div []) ] }
       modify_ \(Env env') -> Env env' { known_props = known_props' }
   env.known_props # Map.lookup prop_name
-    # maybe (success Map.empty) \known_props -> do
-        insertProp identity known_props prop
-          # bindFlipped case _ of
-              Left exc -> failure exc
-              Right known_props' -> success (env.known_props # Map.insert prop_name known_props')
+    # case _ of
+        Nothing -> success (env.known_props # Map.insert prop_name (pure prop))
+        Just known_props -> do
+          insertProp identity known_props prop
+            # bindFlipped case _ of
+                Left exc -> failure exc
+                Right known_props' -> success (env.known_props # Map.insert prop_name known_props')
 
 joinProps ::
   forall m a.
@@ -188,9 +190,13 @@ joinProps g props prop = do
                   -- prop >< prop' ==> keep prop'
                   Left _ -> pure (prop' : known_props)
                   -- prop < prop' ==> prop is subsumed
-                  Right (LT /\ _) -> throwError (Exc { label: Proxy :: Proxy "ignore prop", source: "joinProps", description: show (prop ^. g) <> " is subsumed by " <> show (prop' ^. g) })
+                  Right (LT /\ _) -> do
+                    tellLog { label: "joinProps . props subsume prop", messages: [ "prop" /\ (prop ^. g # render # line # HH.div []) ] }
+                    throwError (Exc { label: Proxy :: Proxy "ignore prop", source: "joinProps", description: show (prop ^. g) <> " is subsumed by " <> show (prop' ^. g) })
                   -- prop = prop' ==> prop is subsumed
-                  Right (EQ /\ _) -> throwError (Exc { label: Proxy :: Proxy "ignore prop", source: "joinProps", description: show (prop ^. g) <> " is subsumed by " <> show (prop' ^. g) })
+                  Right (EQ /\ _) -> do
+                    tellLog { label: "joinProps . props subsume prop", messages: [ "prop" /\ (prop ^. g # render # line # HH.div []) ] }
+                    throwError (Exc { label: Proxy :: Proxy "ignore prop", source: "joinProps", description: show (prop ^. g) <> " is subsumed by " <> show (prop' ^. g) })
                   -- prop > prop' ==> prop' is subsumed so drop prop'
                   Right (GT /\ _) -> do
                     tellLog { label: "joinProps . prop subsumes prop'", messages: [ "prop" /\ (prop ^. g # render # line # HH.div []), "prop'" /\ (prop' ^. g # render # line # HH.div []) ] }
@@ -228,13 +234,29 @@ resolveProp prop@(Prop prop_name _) = do
       # fromMaybe Nil
       # traverse
           ( \ripe_rule -> do
+              -- ripe_rule <- freshenRipeRule ripe_rule # pure
               (applyRipeRuleToProp ripe_rule prop # runExceptT)
                 >>= case _ of
                     Left exc -> do
-                      tellLog { label: "resolve prop . apply rule . failure", messages: [ "prop" /\ (prop # render # line # HH.div []), "ripe_rule" /\ (ripe_rule # from_RipeRule_to_Rule # render # line # HH.div []), "reason" /\ (exc # show # HH.text # pure # HH.div []) ] }
+                      tellLog
+                        { label: "resolve prop . apply rule . failure"
+                        , messages:
+                            [ "prop" /\ (prop # render # line # HH.div [])
+                            , "ripe_rule" /\ (ripe_rule # from_RipeRule_to_Rule # render # line # HH.div [])
+                            , "reason" /\ (exc # show # HH.text # pure # HH.div [])
+                            ]
+                        }
                       pure Nil
-                    Right rule' -> do
-                      tellLog { label: "resolve prop . apply rule . success", messages: [ "prop" /\ (prop # render # line # HH.div []), "ripe_rule" /\ (ripe_rule # from_RipeRule_to_Rule # render # line # HH.div []), "rule after subst" /\ (rule' # render # line # HH.div []) ] }
+                    Right (sigma /\ rule') -> do
+                      tellLog
+                        { label: "resolve prop . apply rule . success"
+                        , messages:
+                            [ "prop" /\ (prop # render # line # HH.div [])
+                            , "ripe_rule" /\ (ripe_rule # from_RipeRule_to_Rule # render # line # HH.div [])
+                            , "sigma" /\ (sigma # render # line # HH.div [])
+                            , "sigma rule" /\ (rule' # render # line # HH.div [])
+                            ]
+                        }
                       case nextHypothesis rule' of
                         Left conclusion -> do
                           -- doesn't have any more hypotheses, so just defer its conclusion
@@ -291,7 +313,8 @@ deferRipeRule ::
   MonadThrow (Exc "error") m =>
   MonadWriter (Array Log) m =>
   RipeRule -> m Unit
-deferRipeRule ripe_rule@{ hypothesis: Hypothesis (Prop prop_name _) _ } = do
+deferRipeRule ripe_rule_ = do
+  ripe_rule@{ hypothesis: Hypothesis (Prop prop_name _) _ } <- ripe_rule_ # freshenRipeRule # pure
   tellLog { label: "defer rule", messages: [ "ripe_rule" /\ (ripe_rule # from_RipeRule_to_Rule # render # line # HH.div []) ] }
   modify_ \(Env env) -> Env env { ripe_rules = env.ripe_rules # Map.insertWith append prop_name (List.singleton ripe_rule) }
   Env env <- get
@@ -309,8 +332,8 @@ deferRipeRule ripe_rule@{ hypothesis: Hypothesis (Prop prop_name _) _ } = do
 
 freshenRipeRule :: RipeRule -> RipeRule
 freshenRipeRule ripe_rule =
-  { hypothesis: ripe_rule.hypothesis # freshenNames
-  , rule': ripe_rule.rule' # freshenNames
+  { hypothesis: ripe_rule.hypothesis # freshenVarNames
+  , rule': ripe_rule.rule' # freshenVarNames
   }
 
 applyRipeRuleToProp ::
@@ -319,9 +342,9 @@ applyRipeRuleToProp ::
   MonadThrow (Exc "error") m =>
   MonadWriter (Array Log) m =>
   MonadState Env m =>
-  RipeRule -> Prop -> ExceptT (Exc "apply rule") m Rule
-applyRipeRuleToProp ripe_rule prop = do
-  ripe_rule@{ hypothesis: Hypothesis hyp_prop hyp_sides } <- freshenRipeRule ripe_rule # pure
+  RipeRule -> Prop -> ExceptT (Exc "apply rule") m (TermSubst /\ Rule)
+applyRipeRuleToProp ripe_rule@{ hypothesis: Hypothesis hyp_prop hyp_sides } prop = do
+  -- ripe_rule@{ hypothesis: Hypothesis hyp_prop hyp_sides } <- freshenRipeRule ripe_rule # pure
   -- first, check if prop satisfies hypothesis_prop
   sigma <-
     compareProp hyp_prop prop
@@ -338,7 +361,7 @@ applyRipeRuleToProp ripe_rule prop = do
   rule'' <-
     processSideHypotheses rule' hyp_sides'
       # mapExceptT (map (lmap (map_Exc_label _apply_rule)))
-  pure rule''
+  pure (sigma /\ rule'')
 
 processSideHypotheses ::
   forall m.
@@ -373,7 +396,7 @@ processSideHypothesis rule = case _ of
           fromOpaque externalFunctionDef.impl (Array.zip externalFunctionDef.inputs args # map (lmap fst) # Map.fromFoldable)
             # either (\err -> lift $ throwError (Exc { label: _error, source: "processSideHypothesis", description: "error in function " <> show externalFunctionDef.name <> ": " <> err })) pure
         pure result
-    rule # substRule (Map.singleton side.resultVarName result) # pure
+    rule # substRule (Map.singleton side.resultVarVarName result) # pure
 
 --------------------------------------------------------------------------------
 -- Utilities
@@ -381,7 +404,7 @@ processSideHypothesis rule = case _ of
 evaluateTerm ::
   forall m y.
   MonadThrow (Exc "error") m =>
-  TermF Name -> m (TermF y)
+  Term -> m (TermF y)
 evaluateTerm = traverse \x -> throwError (Exc { label: _error, source: "evaluateTerm", description: "expected term to be a value, but found a variable " <> show x })
 
 compareProp ::
@@ -410,8 +433,8 @@ compareTerm ::
 -- compareTerm _lty (VarTerm x1) (VarTerm x2) =
 --   EQ
 --     /\ ( Map.fromFoldable
---           [ x1 /\ VarTerm (freshName unit)
---           , x2 /\ VarTerm (freshName unit)
+--           [ x1 /\ VarTerm (freshVarName unit)
+--           , x2 /\ VarTerm (freshVarName unit)
 --           ]
 --       )
 --     # pure

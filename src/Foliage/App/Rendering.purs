@@ -146,6 +146,15 @@ instance _Render_DataType :: Render DataType where
     SetDataType d -> Prim "Set" ⊕ d ⊕ []
     ProductDataType f s -> Punc "(" ⊕ f ⊕ Punc "*" ⊕ s ⊕ Punc ")" ⊕ []
 
+instance _Render_TermSubst :: Render TermSubst where
+  render m =
+    m
+      # mapWithIndex (\x t -> x ⊕ Punc "↦" ⊕ t ⊕ [])
+      # Map.values
+      # Array.fromFoldable
+      # Array.intercalate (Punc "," ⊕ [])
+      # \es -> Punc "{" ⊕ es ⊕ Punc "}" ⊕ []
+
 line :: Htmls -> Htmls
 line = HH.div [ Style.style $ Style.flex_row <> [ "gap: 0.5em", "display: inline-flex", "white-space: flex-wrap" ] ] >>> pure
 
@@ -161,17 +170,20 @@ newtype Prim
   = Prim String
 
 instance _Render_Prim :: Render Prim where
-  render (Prim s) = HH.div [ Style.style $ [ "color: purple" ] ] [ HH.text s ] # pure
+  render (Prim s) = [ HH.text s ] # HH.div [ Style.style $ [ "color: purple" ] ] # pure
 
-instance _Render_Name :: Render Name where
-  render (Name s _) = HH.div [ Style.style $ [ "color: darkgreen" ] ] [ HH.text s ] # pure
+instance _Render_VarName :: Render VarName where
+  render (VarName s i) = [ HH.text s, HH.sub [] [ HH.text (show i) ] ] # HH.div [ Style.style $ [ "color: darkgreen" ] ] # pure
+
+instance _Render_FixedName :: Render FixedName where
+  render (FixedName s) = [ HH.text s ] # HH.div [ Style.style $ [ "color: #66CDAA" ] ] # pure
 
 instance _Render_Hypothesis :: Render Hypothesis where
   render (Hypothesis prop sides) = line (prop ⊕ []) ⊕ (sides # map (render >>> line) # Array.fold) ⊕ []
 
 instance _Render_SideHypothesis :: Render SideHypothesis where
   render = case _ of
-    FunctionSideHypothesis side -> Punc "let" ⊕ side.resultVarName ⊕ Punc "=" ⊕ side.functionName ⊕ Punc "(" ⊕ ((side.args <#> render) # Array.intercalate (Punc "," ⊕ [])) ⊕ Punc ")" ⊕ []
+    FunctionSideHypothesis side -> Punc "let" ⊕ side.resultVarVarName ⊕ Punc "=" ⊕ side.functionName ⊕ Punc "(" ⊕ ((side.args <#> render) # Array.intercalate (Punc "," ⊕ [])) ⊕ Punc ")" ⊕ []
 
 instance _Render_Prop :: Render Prop where
   render (Prop p t) = p ⊕ t ⊕ []
@@ -201,4 +213,4 @@ newtype Lit
   = Lit String
 
 instance _Render_Lit :: Render Lit where
-  render (Lit s) = [ HH.div [ Style.style $ Style.italic <> [ "color: #e67e00" ] ] [ HH.text s ] ]
+  render (Lit s) = [ HH.div [ Style.style $ Style.italic <> [ "color: brown" ] ] [ HH.text s ] ]

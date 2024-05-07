@@ -10,7 +10,7 @@ blank :: Lazy Program
 blank =
   Lazy.defer \_ ->
     Program
-      { name: staticName "Blank"
+      { name: FixedName "Blank"
       , doc: Nothing
       , modules:
           Map.singleton mainModuleName
