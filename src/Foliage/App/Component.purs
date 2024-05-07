@@ -30,7 +30,8 @@ import Unsafe as Unsafe
 -- default_program = Example.Dijkstra.diamond
 -- default_program = Example.Typing.test
 -- default_program = Example.Parsing.nat
-default_program = Example.Parsing.assoc
+-- default_program = Example.Parsing.assoc
+default_program = Example.Typing.example
 
 data Action
   = EditorOutput Editor.Component.Output

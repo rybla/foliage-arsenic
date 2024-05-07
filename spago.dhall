@@ -27,6 +27,7 @@
   , "record"
   , "refs"
   , "spec"
+  , "st"
   , "strings"
   , "transformers"
   , "tuples"

@@ -683,7 +683,6 @@ instance _Render_SideHypothesis :: Render SideHypothesis where
 instance _Render_Prop :: Render Prop where
   render (Prop p t) = do
     RenderCtx { mod: Module mod } <- ask
-    Debug.traceM (show (Module mod))
     Relation r <-
       mod.relations
         # lookup "relations" p
