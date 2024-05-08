@@ -148,7 +148,7 @@ fixpointFocusModule = do
 
 askRenderCtx :: forall m. MonadReader Ctx m => m RenderCtx
 askRenderCtx = do
-  Ctx ctx  <- ask
+  Ctx ctx <- ask
   pure (RenderCtx { mod: ctx.focusModule })
 
 learnProp ::
@@ -245,14 +245,14 @@ resolveProp prop@(Prop prop_name _) = do
               (applyRipeRuleToProp ripe_rule prop # runExceptT)
                 >>= case _ of
                     Left exc -> do
-                      tellLog
-                        { label: "resolve prop . apply rule . failure"
-                        , messages:
-                            [ "prop" /\ (prop # render # line # flip runReader renderCtx # HH.div [])
-                            , "ripe_rule" /\ (ripe_rule # from_RipeRule_to_Rule # render # line # flip runReader renderCtx # HH.div [])
-                            , "reason" /\ (exc # show # HH.text # pure # HH.div [])
-                            ]
-                        }
+                      -- tellLog
+                      --   { label: "resolve prop . apply rule . failure"
+                      --   , messages:
+                      --       [ "prop" /\ (prop # render # line # flip runReader renderCtx # HH.div [])
+                      --       , "ripe_rule" /\ (ripe_rule # from_RipeRule_to_Rule # render # line # flip runReader renderCtx # HH.div [])
+                      --       , "reason" /\ (exc # show # HH.text # pure # HH.div [])
+                      --       ]
+                      --   }
                       pure Nil
                     Right (sigma /\ rule') -> do
                       tellLog
@@ -441,9 +441,10 @@ compareTerm ::
 --           ]
 --       )
 --     # pure
-compareTerm _lty t1 (VarTerm x2) = EQ /\ (Map.singleton x2 t1) # pure
-
+-- TODO: still a little unsure about which should go first
 compareTerm _lty (VarTerm x1) t2 = EQ /\ (Map.singleton x1 t2) # pure
+
+compareTerm _lty t1 (VarTerm x2) = EQ /\ (Map.singleton x2 t1) # pure
 
 compareTerm lty@(NamedLatticeType x) t1 t2 = do
   Ctx { focusModule } <- ask

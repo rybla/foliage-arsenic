@@ -4560,14 +4560,14 @@
     };
   }();
   var showList = function(dictShow) {
-    var show11 = show(dictShow);
+    var show10 = show(dictShow);
     return {
       show: function(v) {
         if (v instanceof Nil) {
           return "Nil";
         }
         ;
-        return "(" + (intercalate3(" : ")(map8(show11)(v)) + " : Nil)");
+        return "(" + (intercalate3(" : ")(map8(show10)(v)) + " : Nil)");
       }
     };
   };
@@ -7489,10 +7489,10 @@
     }
   };
   var genericShowArgsArgument = function(dictShow) {
-    var show11 = show(dictShow);
+    var show10 = show(dictShow);
     return {
       genericShowArgs: function(v) {
-        return [show11(v)];
+        return [show10(v)];
       }
     };
   };
@@ -7594,7 +7594,7 @@
       var throwError3 = throwError(dictMonadThrow);
       var pure20 = pure(dictMonadThrow.Monad0().Applicative0());
       return function(dictShow) {
-        var show11 = show(dictShow);
+        var show10 = show(dictShow);
         return function(label5) {
           return function(x) {
             return function(m) {
@@ -7603,7 +7603,7 @@
                 return throwError3({
                   label: _error,
                   source: "lookup",
-                  description: label5 + (" not found: " + show11(x))
+                  description: label5 + (" not found: " + show10(x))
                 });
               }
               ;
@@ -10123,12 +10123,12 @@
 
   // output/Foliage.Example.Typing/index.js
   var append_render12 = /* @__PURE__ */ append_render(_Render_Htmls);
-  var append_render13 = /* @__PURE__ */ append_render(_Render_Term);
+  var append_render13 = /* @__PURE__ */ append_render(_Render_RenderM_Htmls);
   var mempty3 = /* @__PURE__ */ mempty(/* @__PURE__ */ monoidReaderT(applicativeIdentity)(monoidArray));
+  var append_render22 = /* @__PURE__ */ append_render(_Render_Term);
   var show5 = /* @__PURE__ */ show(/* @__PURE__ */ _Show_Term(_Eq_Show));
-  var append_render22 = /* @__PURE__ */ append_render(_Render_Lit);
+  var append_render32 = /* @__PURE__ */ append_render(_Render_Lit);
   var bind5 = /* @__PURE__ */ bind(/* @__PURE__ */ bindReaderT(bindIdentity));
-  var append_render32 = /* @__PURE__ */ append_render(_Render_RenderM_Htmls);
   var $$void5 = /* @__PURE__ */ $$void(functorST);
   var show12 = /* @__PURE__ */ show(showInt);
   var mempty1 = /* @__PURE__ */ mempty(monoidList);
@@ -10159,34 +10159,34 @@
   };
   var render_Type = function(v) {
     if (v instanceof PairTerm) {
-      return append_render12([text("(")])(append_render13(v.value0)(append_render12([text("\u2192")])(append_render13(v.value1)(append_render12([text(")")])(mempty3)))));
+      return append_render12([text("(")])(append_render13(render_Type(v.value0))(append_render12([text("\u2192")])(append_render13(render_Type(v.value1))(append_render12([text(")")])(mempty3)))));
     }
     ;
     if (v instanceof VarTerm) {
-      return append_render13(v)(mempty3);
+      return append_render22(v)(mempty3);
     }
     ;
     return unsafeCrashWith("invalid Type: " + show5(v));
   };
   var render_Term = function(v) {
     if (v instanceof LeftTerm && (v.value0 instanceof LeftTerm && v.value0.value0 instanceof LiteralTerm)) {
-      return append_render22("@" + v.value0.value0.value0)(mempty3);
+      return append_render32("@" + v.value0.value0.value0)(mempty3);
     }
     ;
-    if (v instanceof LeftTerm && v.value0 instanceof LeftTerm) {
-      return append_render13(v.value0.value0)(mempty3);
+    if (v instanceof LeftTerm && (v.value0 instanceof LeftTerm && v.value0.value0 instanceof VarTerm)) {
+      return append_render22(v.value0.value0)(mempty3);
     }
     ;
     if (v instanceof LeftTerm && v.value0 instanceof RightTerm) {
-      return append_render12([text("\u03BB")])(append_render13(v.value0.value0)(mempty3));
+      return append_render12([text("\u03BB")])(append_render13(render_Term(v.value0.value0))(mempty3));
     }
     ;
     if (v instanceof RightTerm && v.value0 instanceof PairTerm) {
-      return append_render12([text("(")])(append_render13(v.value0.value0)(append_render13(v.value0.value1)(append_render12([text(")")])(mempty3))));
+      return append_render12([text("(")])(append_render13(render_Term(v.value0.value0))(append_render13(render_Term(v.value0.value1))(append_render12([text(")")])(mempty3))));
     }
     ;
     if (v instanceof VarTerm) {
-      return append_render13(v)(mempty3);
+      return append_render22(v)(mempty3);
     }
     ;
     return unsafeCrashWith("invalid Term: " + show5(v));
@@ -10197,11 +10197,11 @@
     }
     ;
     if (v instanceof RightTerm && v.value0 instanceof PairTerm) {
-      return append_render13(v.value0.value0)(append_render12([text(",")])(append_render13(v.value0.value1)(mempty3)));
+      return append_render13(render_Type(v.value0.value0))(append_render12([text(",")])(append_render13(render_Context(v.value0.value1))(mempty3)));
     }
     ;
     if (v instanceof VarTerm) {
-      return append_render13(v)(mempty3);
+      return append_render22(v)(mempty3);
     }
     ;
     return unsafeCrashWith("invalid Context: " + show5(v));
@@ -10214,18 +10214,18 @@
   };
   var name_Typed = "Typed";
   var prop_Typed = /* @__PURE__ */ function() {
-    var $159 = Prop.create(name_Typed);
-    return function($160) {
-      return $159(prop_Typed_term($160));
+    var $162 = Prop.create(name_Typed);
+    return function($163) {
+      return $162(prop_Typed_term($163));
     };
   }();
   var name_Type = "Type";
   var name_Term = "Term";
   var name_Parsed = "Parsed";
   var prop_Parsed = /* @__PURE__ */ function() {
-    var $161 = Prop.create(name_Parsed);
-    return function($162) {
-      return $161(prop_Parsed_term($162));
+    var $164 = Prop.create(name_Parsed);
+    return function($165) {
+      return $164(prop_Parsed_term($165));
     };
   }();
   var name_Context = "Context";
@@ -10261,9 +10261,9 @@
       domain: prod12(prod12(lty_Index)(lty_Index))(lty_Term),
       render: function(v) {
         if (v instanceof PairTerm && v.value0 instanceof PairTerm) {
-          return bind5(append_render13(v.value0.value0)(mempty3))(function(i01) {
-            return bind5(append_render13(v.value0.value1)(mempty3))(function(i11) {
-              return append_render12([sub_(i01)])(append_render32(render_Term(v.value1))(append_render12([sub_(i11)])(mempty3)));
+          return bind5(append_render22(v.value0.value0)(mempty3))(function(i01) {
+            return bind5(append_render22(v.value0.value1)(mempty3))(function(i11) {
+              return append_render12([sub_(i01)])(append_render13(render_Term(v.value1))(append_render12([sub_(i11)])(mempty3)));
             });
           });
         }
@@ -10290,9 +10290,9 @@
       domain: prod12(prod12(prod12(lty_Index)(lty_Index))(lty_Term))(prod12(lty_Context)(lty_Type)),
       render: function(v) {
         if (v instanceof PairTerm && (v.value0 instanceof PairTerm && (v.value0.value0 instanceof PairTerm && v.value1 instanceof PairTerm))) {
-          return bind5(append_render13(v.value0.value0.value0)(mempty3))(function(i01) {
-            return bind5(append_render13(v.value0.value0.value1)(mempty3))(function(i11) {
-              return append_render12([sub_(i01)])(append_render32(render_Context(v.value1.value0))(append_render12([text("\u22A2")])(append_render32(render_Term(v.value0.value1))(append_render12([text(":")])(append_render32(render_Type(v.value1.value1))(append_render12([sub_(i11)])(mempty3)))))));
+          return bind5(append_render22(v.value0.value0.value0)(mempty3))(function(i01) {
+            return bind5(append_render22(v.value0.value0.value1)(mempty3))(function(i11) {
+              return append_render13(render_Context(v.value1.value0))(append_render12([text("\u22A2")])(append_render12([sub_(i01)])(append_render13(render_Term(v.value0.value1))(append_render12([sub_(i11)])(append_render12([text(":")])(append_render13(render_Type(v.value1.value1))(mempty3)))))));
             });
           });
         }
@@ -10335,11 +10335,11 @@
         return i_ref.value;
       };
       var go2 = function(tm) {
-        if (tm instanceof LeftTerm && tm.value0 instanceof LeftTerm) {
+        if (tm instanceof LeftTerm && (tm.value0 instanceof LeftTerm && tm.value0.value0 instanceof LiteralTerm)) {
           return function __do3() {
             var i0 = next_i();
             var i1 = next_i();
-            return $$void5(push(new Tuple("@" + (show5(tm.value0.value0) + (" " + ("[" + (show12(i0) + ("\u2192" + (show12(i1) + "]")))))), new Rule({
+            return $$void5(push(new Tuple("@" + (tm.value0.value0.value0 + (" " + ("[" + (show12(i0) + ("\u2192" + (show12(i1) + "]")))))), new Rule({
               hypotheses: mempty1,
               conclusion: prop_Parsed({
                 i0: new LiteralTerm(show12(i0), dty_Int),
@@ -10468,7 +10468,7 @@
     }));
   }();
   var example = /* @__PURE__ */ defer2(function(v) {
-    var input3 = term_Lam(term_Var(new LiteralTerm("0", dty_Int)));
+    var input3 = term_App(term_Var(new LiteralTerm("1", dty_Int)))(term_Var(new LiteralTerm("0", dty_Int)));
     return new Program({
       name: "Typing . Simply-Typed Lambda Calculus",
       doc: new Just("TODO"),
@@ -10497,6 +10497,49 @@
               i1,
               tm,
               ty,
+              ctx
+            })
+          });
+        }()), new Tuple("var 1", function() {
+          var \u03B2 = new VarTerm(newVarName("\u03B2"));
+          var \u03B1 = new VarTerm(newVarName("\u03B1"));
+          var tm = term_Var(new LiteralTerm("1", dty_Int));
+          var i1 = new VarTerm(newVarName("i1"));
+          var i0 = new VarTerm(newVarName("i0"));
+          var ctx = context_Cons(\u03B2)(context_Cons(\u03B1)(new VarTerm(newVarName("\u0393"))));
+          return new Rule({
+            hypotheses: fromFoldable1([new Hypothesis(prop_Parsed({
+              i0,
+              i1,
+              tm
+            }), [])]),
+            conclusion: prop_Typed({
+              i0,
+              i1,
+              tm,
+              ty: \u03B1,
+              ctx
+            })
+          });
+        }()), new Tuple("var 2", function() {
+          var \u03B3 = new VarTerm(newVarName("\u03B3"));
+          var \u03B2 = new VarTerm(newVarName("\u03B2"));
+          var \u03B1 = new VarTerm(newVarName("\u03B1"));
+          var tm = term_Var(new LiteralTerm("2", dty_Int));
+          var i1 = new VarTerm(newVarName("i1"));
+          var i0 = new VarTerm(newVarName("i0"));
+          var ctx = context_Cons(\u03B3)(context_Cons(\u03B2)(context_Cons(\u03B1)(new VarTerm(newVarName("\u0393")))));
+          return new Rule({
+            hypotheses: fromFoldable1([new Hypothesis(prop_Parsed({
+              i0,
+              i1,
+              tm
+            }), [])]),
+            conclusion: prop_Typed({
+              i0,
+              i1,
+              tm,
+              ty: \u03B1,
               ctx
             })
           });
@@ -10709,13 +10752,8 @@
   var fold5 = /* @__PURE__ */ fold(foldableList);
   var fold14 = /* @__PURE__ */ fold5(monoidList);
   var traverse23 = /* @__PURE__ */ traverse(traversableList);
-  var show8 = /* @__PURE__ */ show(/* @__PURE__ */ _Show_Exc({
-    reflectSymbol: function() {
-      return "apply rule";
-    }
-  }));
   var render22 = /* @__PURE__ */ render(_Render_TermSubst);
-  var show9 = /* @__PURE__ */ show(showInt);
+  var show8 = /* @__PURE__ */ show(showInt);
   var lookup13 = /* @__PURE__ */ lookup6(_Ord_FixedName);
   var traceM2 = /* @__PURE__ */ traceM();
   var fold22 = /* @__PURE__ */ fold5(/* @__PURE__ */ monoidSemigroupMap()(_Ord_FixedName)(semigroupList));
@@ -10773,7 +10811,7 @@
             return new Tuple(v.value0, new Cons(v1.value0, v.value1));
           }
           ;
-          throw new Error("Failed pattern match at Foliage.Interpretation (line 537, column 25 - line 539, column 30): " + [v1.constructor.name]);
+          throw new Error("Failed pattern match at Foliage.Interpretation (line 538, column 25 - line 540, column 30): " + [v1.constructor.name]);
         };
       };
       return foldr7(select5)(new Tuple(Nil.value, Nil.value))(xs);
@@ -10809,8 +10847,8 @@
               source: "processSideHypothesis",
               description: "could not function definition of the name " + show32(v.value0.functionName)
             })))(pure23)(lookupModule2($$Proxy.value)(v.value0.functionName)(v1.focusModule)))(function(functionDef) {
-              return bind9(bind9(traverse32(function($706) {
-                return lift1(evaluateTerm1($706));
+              return bind9(bind9(traverse32(function($703) {
+                return lift1(evaluateTerm1($703));
               })(v.value0.args))(function(args) {
                 return bind9(either(function(err) {
                   return lift1(throwError3({
@@ -10867,12 +10905,12 @@
         return function(v) {
           return function(v1) {
             return function(v2) {
-              if (v2 instanceof VarTerm) {
-                return pure23(new Tuple(EQ.value, singleton6(v2.value0)(v1)));
-              }
-              ;
               if (v1 instanceof VarTerm) {
                 return pure23(new Tuple(EQ.value, singleton6(v1.value0)(v2)));
+              }
+              ;
+              if (v2 instanceof VarTerm) {
+                return pure23(new Tuple(EQ.value, singleton6(v2.value0)(v1)));
               }
               ;
               if (v instanceof NamedLatticeType) {
@@ -10905,13 +10943,13 @@
                         return pure23(new Tuple(v5.value0.value0.value0, v5.value0.value0.value1));
                       }
                       ;
-                      throw new Error("Failed pattern match at Foliage.Interpretation (line 457, column 9 - line 460, column 58): " + [v5.constructor.name]);
+                      throw new Error("Failed pattern match at Foliage.Interpretation (line 458, column 9 - line 461, column 58): " + [v5.constructor.name]);
                     }
                     ;
-                    throw new Error("Failed pattern match at Foliage.Interpretation (line 452, column 28 - line 460, column 58): " + [v4.value0.constructor.name]);
+                    throw new Error("Failed pattern match at Foliage.Interpretation (line 453, column 28 - line 461, column 58): " + [v4.value0.constructor.name]);
                   }
                   ;
-                  throw new Error("Failed pattern match at Foliage.Interpretation (line 450, column 3 - line 460, column 58): " + [v4.constructor.name]);
+                  throw new Error("Failed pattern match at Foliage.Interpretation (line 451, column 3 - line 461, column 58): " + [v4.constructor.name]);
                 });
               }
               ;
@@ -11048,7 +11086,7 @@
                       return pure23(new Tuple(GT.value, v4.value1));
                     }
                     ;
-                    throw new Error("Failed pattern match at Foliage.Interpretation (line 497, column 11 - line 503, column 44): " + [v4.constructor.name]);
+                    throw new Error("Failed pattern match at Foliage.Interpretation (line 498, column 11 - line 504, column 44): " + [v4.constructor.name]);
                   });
                 }
                 ;
@@ -11077,7 +11115,7 @@
                     return pure23(new Tuple(LT.value, v32.value1));
                   }
                   ;
-                  throw new Error("Failed pattern match at Foliage.Interpretation (line 510, column 9 - line 513, column 42): " + [v32.constructor.name]);
+                  throw new Error("Failed pattern match at Foliage.Interpretation (line 511, column 9 - line 514, column 42): " + [v32.constructor.name]);
                 });
               }
               ;
@@ -11095,7 +11133,7 @@
                     return throwError_compareTerm1(new DiscreteLatticeType(v.value0))(v1)(v2);
                   }
                   ;
-                  throw new Error("Failed pattern match at Foliage.Interpretation (line 517, column 9 - line 520, column 79): " + [v32.constructor.name]);
+                  throw new Error("Failed pattern match at Foliage.Interpretation (line 518, column 9 - line 521, column 79): " + [v32.constructor.name]);
                 });
               }
               ;
@@ -11564,12 +11602,7 @@
                   return bind9(map28(fold14)(traverse32(function(ripe_rule) {
                     return bind9(runExceptT(applyRipeRuleToProp3(ripe_rule)(v)))(function(v2) {
                       if (v2 instanceof Left) {
-                        return discard13(tellLog2({
-                          label: "resolve prop . apply rule . failure",
-                          messages: [new Tuple("prop", div2([])(flip(runReader)(renderCtx)(line(render10(v))))), new Tuple("ripe_rule", div2([])(flip(runReader)(renderCtx)(line(render13(from_RipeRule_to_Rule(ripe_rule)))))), new Tuple("reason", div2([])(pure9(text(show8(v2.value0)))))]
-                        }))(function() {
-                          return pure23(Nil.value);
-                        });
+                        return pure23(Nil.value);
                       }
                       ;
                       if (v2 instanceof Right) {
@@ -11641,12 +11674,12 @@
           }))(function(v) {
             return bind9(ask3)(function(v1) {
               return discard13(tellLog2({
-                label: "gas = " + show9(v.gas),
+                label: "gas = " + show8(v.gas),
                 messages: []
               }))(function() {
                 return discard13(when4(v.gas <= 0)(discard13(tellLog2({
                   label: "error",
-                  messages: [new Tuple("reason", div2([])(pure9(text("out of gas")))), new Tuple("initialGas", div2([])(pure9(text(show9(v1.focusModule.value0.initialGas)))))]
+                  messages: [new Tuple("reason", div2([])(pure9(text("out of gas")))), new Tuple("initialGas", div2([])(pure9(text(show8(v1.focusModule.value0.initialGas)))))]
                 }))(function() {
                   return throwError3({
                     label: _error,
@@ -11657,7 +11690,7 @@
                   if (v.active_props instanceof Nil) {
                     return discard13(tellLog2({
                       label: "done",
-                      messages: [new Tuple("gas", div2([])(pure9(text(show9(v.gas)))))]
+                      messages: [new Tuple("gas", div2([])(pure9(text(show8(v.gas)))))]
                     }))(function() {
                       return pure23(unit);
                     });
@@ -11838,7 +11871,7 @@
   var monadExceptT3 = /* @__PURE__ */ monadExceptT(monadHalogenM);
   var interpProgram2 = /* @__PURE__ */ interpProgram(/* @__PURE__ */ monadWriterT(monoidArray)(monadExceptT3))(/* @__PURE__ */ monadWriterWriterT(monoidArray)(monadExceptT3))(/* @__PURE__ */ monadThrowWriterT(monoidArray)(/* @__PURE__ */ monadThrowExceptT(monadHalogenM)));
   var traceM3 = /* @__PURE__ */ traceM()(monadHalogenM);
-  var show10 = /* @__PURE__ */ show(/* @__PURE__ */ _Show_Exc({
+  var show9 = /* @__PURE__ */ show(/* @__PURE__ */ _Show_Exc({
     reflectSymbol: function() {
       return "error";
     }
@@ -11928,7 +11961,7 @@
                 });
               })(interpProgram2(prog))))(function(v1) {
                 if (v1 instanceof Left) {
-                  return discard1(traceM3(show10(v1.value0)))(function() {
+                  return discard1(traceM3(show9(v1.value0)))(function() {
                     return tell1(_viewer)(unit)(SetResult.create(new Just(new ErrResult({
                       err: v1.value0,
                       env: Nothing.value
