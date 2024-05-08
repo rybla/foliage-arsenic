@@ -27,10 +27,10 @@ import Halogen.HTML as HH
 import Type.Proxy (Proxy(..))
 import Unsafe as Unsafe
 
--- default_mod = Example.Dijkstra.diamond
+default_mod = Example.Dijkstra.diamond
 -- default_mod = Example.Parsing.nat
 -- default_mod = Example.Parsing.assoc
-default_mod = Example.Typing.example
+-- default_mod = Example.Typing.example
 
 data Action
   = EditorOutput Editor.Component.Output
