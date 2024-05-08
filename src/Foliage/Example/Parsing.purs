@@ -34,7 +34,7 @@ import Unsafe as Unsafe
 --------------------------------------------------------------------------------
 -- Examples
 --------------------------------------------------------------------------------
-nat :: Lazy Program
+nat :: Lazy Module
 nat =
   Lazy.defer \_ ->
     let
@@ -102,7 +102,7 @@ nat =
     in
       make_example { doc, input, latticeTypeDefs, renderAst, rules }
 
-assoc :: Lazy Program
+assoc :: Lazy Module
 assoc =
   Lazy.defer \_ ->
     let
@@ -124,9 +124,9 @@ assoc =
       input :: Array String
       input = "x+x+x" # CodeUnits.toCharArray # map (pure >>> CodeUnits.fromCharArray)
 
-      -- latticeTypeDefs = [ name."Ast" /\ LatticeTypeDef ((ltyAst `prod12` ltyAst) `sumLir` ltyUnit) ]
+      latticeTypeDefs = [ name."Ast" /\ LatticeTypeDef ((ltyAst `prod12` ltyAst) `sumLir` ltyUnit) ]
       -- latticeTypeDefs = [ name."Ast" /\ LatticeTypeDef ((ltyAst `prod12` ltyAst) `sumLgtr` ltyUnit) ]
-      latticeTypeDefs = [ name."Ast" /\ LatticeTypeDef ((ltyAst `prod12` ltyAst) `sumLltr` ltyUnit) ]
+      -- latticeTypeDefs = [ name."Ast" /\ LatticeTypeDef ((ltyAst `prod12` ltyAst) `sumLltr` ltyUnit) ]
 
       renderAst :: Term -> RenderM Htmls
       renderAst = case _ of
@@ -186,48 +186,41 @@ make_example ::
   , renderAst :: Term -> a
   , rules :: Array (FixedName /\ Rule)
   } ->
-  Program
+  Module
 make_example spec =
-  Program
+  Module
     { name: FixedName ("Parsing . Nat")
     , doc: spec.doc # Just
-    , modules:
-        Map.singleton mainModuleName
-          ( Module
-              { name: mainModuleName
-              , doc: Nothing
-              , initialGas: 40
-              , dataTypeDefs:
-                  [ dataTypeDef_Int
-                  , dataTypeDef_String
-                  ]
-                    # Map.fromFoldable
-              , latticeTypeDefs:
-                  [ [ latticeTypeDef_Int
-                    , latticeTypeDef_String
-                    , latticeTypeDef_Symbol
-                    , latticeTypeDef_Index
-                    ]
-                  , spec.latticeTypeDefs
-                  ]
-                    # Array.concat
-                    # Map.fromFoldable
-              , functionDefs:
-                  []
-                    # Map.fromFoldable
-              , relations:
-                  [ relation_Token
-                  , relation_Parse spec.renderAst
-                  ]
-                    # Map.fromFoldable
-              , rules:
-                  [ compileInput spec.input
-                  , spec.rules
-                  ]
-                    # Array.concat
-                    # Map.fromFoldable
-              }
-          )
+    , initialGas: 40
+    , dataTypeDefs:
+        [ dataTypeDef_Int
+        , dataTypeDef_String
+        ]
+          # Map.fromFoldable
+    , latticeTypeDefs:
+        [ [ latticeTypeDef_Int
+          , latticeTypeDef_String
+          , latticeTypeDef_Symbol
+          , latticeTypeDef_Index
+          ]
+        , spec.latticeTypeDefs
+        ]
+          # Array.concat
+          # Map.fromFoldable
+    , functionDefs:
+        []
+          # Map.fromFoldable
+    , relations:
+        [ relation_Token
+        , relation_Parse spec.renderAst
+        ]
+          # Map.fromFoldable
+    , rules:
+        [ compileInput spec.input
+        , spec.rules
+        ]
+          # Array.concat
+          # Map.fromFoldable
     }
 
 --------------------------------------------------------------------------------

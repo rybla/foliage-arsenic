@@ -5,9 +5,9 @@ import Data.Tuple.Nested (type (/\), (/\))
 import Foliage.Example.Blank as Blank
 import Foliage.Example.Dijkstra as Dijkstra
 import Foliage.Example.Parsing as Parsing
-import Foliage.Program (Program)
+import Foliage.Program (Module)
 
-examples :: Array (String /\ Lazy Program)
+examples :: Array (String /\ Lazy Module)
 examples =
   [ "Blank" /\ Blank.blank
   , "Dijkstra . Diamond" /\ Dijkstra.diamond

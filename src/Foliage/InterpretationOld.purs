@@ -123,8 +123,8 @@ module Foliage.InterpretationOld where
 --             pure (compare x y)
 --     ]
 
--- interpProgram :: forall m. MonadWriter (Array Log) m => MonadThrow Err m => MonadEffect m => Program -> m (List Prop)
--- interpProgram (Program prog) = do
+-- interpModule :: forall m. MonadWriter (Array Log) m => MonadThrow Err m => MonadEffect m => Program -> m (List Prop)
+-- interpModule (Program prog) = do
 --   Module main <- lookup "module Main" mainModuleName prog.modules
 --   let
 --     ctx =

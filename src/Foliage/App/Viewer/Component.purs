@@ -15,7 +15,7 @@ import Foliage.App.Style as Style
 import Foliage.Common (Exc)
 import Foliage.Interpretation (Env(..))
 import Foliage.Interpretation as Foliage.Interpretation
-import Foliage.Program (Prop, Program, RenderCtx(..), from_RipeRule_to_Rule, getMainModule)
+import Foliage.Program (Prop, Module, RenderCtx(..), from_RipeRule_to_Rule)
 import Foliage.Program as Program
 import Halogen (Component, mkComponent)
 import Halogen as H
@@ -28,10 +28,10 @@ data Query a
   | SetIntermediateEnv (Maybe Env) a
 
 type Input
-  = { program :: Program }
+  = { mod :: Module }
 
 type State
-  = { program :: Program
+  = { mod :: Module
     , result :: Maybe Result
     , intermediate_env :: Maybe Env
     }
@@ -54,7 +54,7 @@ component = mkComponent { initialState, eval, render }
   initialState input =
     { result: Nothing
     , intermediate_env: Nothing
-    , program: input.program
+    , mod: input.mod
     }
 
   eval = H.mkEval H.defaultEval { handleQuery = handleQuery, handleAction = handleAction }
@@ -72,7 +72,7 @@ component = mkComponent { initialState, eval, render }
     Run -> H.raise Ran
 
   getRenderCtx :: State -> RenderCtx
-  getRenderCtx state = RenderCtx { mod: getMainModule state.program }
+  getRenderCtx state = RenderCtx { mod: state.mod }
 
   renderEnv state (Env env) =
     [ HH.div [ Style.style $ Style.flex_column ]

@@ -11,9 +11,11 @@ import Control.Monad.State (class MonadState, get, modify, modify_, runStateT)
 import Control.Monad.Trans.Class (lift)
 import Control.Monad.Writer (class MonadWriter)
 import Control.Monad.Writer as Writer
+import Control.Plus (empty)
 import Data.Array as Array
 import Data.Bifunctor (lmap, rmap)
 import Data.Either (Either(..), either)
+import Data.FunctorWithIndex (mapWithIndex)
 import Data.Lens (Getter', (^.))
 import Data.Lens.Record as Lens.Record
 import Data.List (List(..), (:))
@@ -22,7 +24,7 @@ import Data.Map (Map)
 import Data.Map as Map
 import Data.Maybe (Maybe(..), fromMaybe, maybe)
 import Data.Newtype (class Newtype)
-import Data.Traversable (traverse, traverse_)
+import Data.Traversable (sequence, traverse, traverse_)
 import Data.Tuple (fst)
 import Data.Tuple.Nested (type (/\), (/\))
 import Debug as Debug
@@ -37,8 +39,7 @@ import Unsafe as Unsafe
 --------------------------------------------------------------------------------
 newtype Ctx
   = Ctx
-  { modules :: Map FixedName Module
-  , focusModule :: Module
+  { mod :: Module
   }
 
 derive instance _Newtype_Ctx :: Newtype Ctx _
@@ -75,26 +76,24 @@ tellLog r = do
 --------------------------------------------------------------------------------
 -- Endpoints
 --------------------------------------------------------------------------------
-interpProgram ::
+interpModule ::
   forall m.
   Monad m =>
   MonadWriter (Array Log) m =>
   MonadThrow (Exc "error") m =>
-  Program -> m (Maybe (Exc "error") /\ Env)
-interpProgram (Program prog) = do
-  focusModule@(Module main) <- lookup "module Main" mainModuleName prog.modules
-  Debug.traceM "[interpProgram]"
+  Module -> m (Maybe (Exc "error") /\ Env)
+interpModule (Module mod) = do
+  Debug.traceM "[interpModule]"
   let
     ctx =
       Ctx
-        { modules: prog.modules
-        , focusModule
+        { mod: Module mod
         }
 
     env =
       let
         ripe_rules /\ active_props =
-          main.rules # Map.values
+          mod.rules # Map.values
             # partitionEither
                 ( \rule ->
                     rule
@@ -106,7 +105,7 @@ interpProgram (Program prog) = do
             # lmap List.fold
       in
         Env
-          { gas: main.initialGas
+          { gas: mod.initialGas
           , ripe_rules
           , known_props: active_props # map (\{ prop: prop@(Prop prop_name _) } -> Map.singleton prop_name (List.singleton prop)) # List.foldr (Map.unionWith append) Map.empty
           , active_props
@@ -130,10 +129,10 @@ fixpointFocusModule ::
   m Unit
 fixpointFocusModule = do
   Env env <- modify \(Env env) -> (Env env { gas = env.gas - 1 })
-  Ctx { focusModule: Module main } <- ask
+  Ctx { mod: Module mod } <- ask
   tellLog { label: "gas = " <> show env.gas, messages: [] }
   when (env.gas <= 0) do
-    tellLog { label: "error", messages: [ "reason" /\ ("out of gas" # HH.text # pure # HH.div []), "initialGas" /\ (main.initialGas # show # HH.text # pure # HH.div []) ] }
+    tellLog { label: "error", messages: [ "reason" /\ ("out of gas" # HH.text # pure # HH.div []), "initialGas" /\ (mod.initialGas # show # HH.text # pure # HH.div []) ] }
     throwError (Exc { label: _error, source: "fixpointFocusModule", description: "ran out of gas" })
   case env.active_props of
     Nil -> do
@@ -149,7 +148,7 @@ fixpointFocusModule = do
 askRenderCtx :: forall m. MonadReader Ctx m => m RenderCtx
 askRenderCtx = do
   Ctx ctx <- ask
-  pure (RenderCtx { mod: ctx.focusModule })
+  pure (RenderCtx { mod: ctx.mod })
 
 learnProp ::
   forall m.
@@ -245,14 +244,14 @@ resolveProp prop@(Prop prop_name _) = do
               (applyRipeRuleToProp ripe_rule prop # runExceptT)
                 >>= case _ of
                     Left exc -> do
-                      -- tellLog
-                      --   { label: "resolve prop . apply rule . failure"
-                      --   , messages:
-                      --       [ "prop" /\ (prop # render # line # flip runReader renderCtx # HH.div [])
-                      --       , "ripe_rule" /\ (ripe_rule # from_RipeRule_to_Rule # render # line # flip runReader renderCtx # HH.div [])
-                      --       , "reason" /\ (exc # show # HH.text # pure # HH.div [])
-                      --       ]
-                      --   }
+                      tellLog
+                        { label: "resolve prop . apply rule . failure"
+                        , messages:
+                            [ "prop" /\ (prop # render # line # flip runReader renderCtx # HH.div [])
+                            , "ripe_rule" /\ (ripe_rule # from_RipeRule_to_Rule # render # line # flip runReader renderCtx # HH.div [])
+                            , "reason" /\ (exc # show # HH.text # pure # HH.div [])
+                            ]
+                        }
                       pure Nil
                     Right (sigma /\ rule') -> do
                       tellLog
@@ -352,10 +351,13 @@ applyRipeRuleToProp (RipeRule ripe_rule@{ hypothesis: Hypothesis hyp_prop hyp_si
   sigma <-
     compareProp hyp_prop prop
       # mapExceptT (map (lmap (map_Exc_label _apply_rule)))
-      # bindFlipped case _ of
-          LT /\ sigma -> pure sigma
-          EQ /\ sigma -> pure sigma
-          _ -> throwError (Exc { label: _apply_rule, source: "applyRipeRuleToProp", description: show hyp_prop <> " < " <> show prop })
+      # bindFlipped
+          ( case _ of
+              LT /\ sigma -> pure sigma
+              EQ /\ sigma -> pure sigma
+              _ -> throwError (Exc { label: _apply_rule, source: "applyRipeRuleToProp", description: show hyp_prop <> " < " <> show prop })
+          )
+      # bindFlipped saturateTermSubst
   let
     rule' = ripe_rule.rule' # substRule sigma
 
@@ -365,6 +367,40 @@ applyRipeRuleToProp (RipeRule ripe_rule@{ hypothesis: Hypothesis hyp_prop hyp_si
     processSideHypotheses rule' hyp_sides'
       # mapExceptT (map (lmap (map_Exc_label _apply_rule)))
   pure (sigma /\ rule'')
+
+-- Applies a substitution to itself until fixpoint. Excepts if ever a var is mapped
+-- to a term that contains that var.
+saturateTermSubst ::
+  forall m.
+  Monad m =>
+  TermSubst -> ExceptT (Exc "apply rule") m TermSubst
+saturateTermSubst sigma0 = do
+  let
+    loop prev_sigma sigma =
+      if prev_sigma == Just sigma then
+        pure sigma
+      else do
+        sigma' <-
+          sigma
+            # mapWithIndex
+                ( \x t -> do
+                    t
+                      # traverse_
+                          ( \y ->
+                              when (x == y) do
+                                throwError
+                                  ( Exc
+                                      { label: Proxy
+                                      , source: "saturateTermSubst"
+                                      , description: "The var " <> show x <> " was substituted for " <> show t <> ", which contains the var itself."
+                                      }
+                                  )
+                          )
+                    t # substTerm sigma # pure
+                )
+            # sequence
+        loop (Just sigma) sigma'
+  loop Nothing sigma0
 
 processSideHypotheses ::
   forall m.
@@ -384,9 +420,9 @@ processSideHypothesis ::
   Rule -> SideHypothesis -> ExceptT (Exc "apply rule") m Rule
 processSideHypothesis rule = case _ of
   FunctionSideHypothesis side -> do
-    Ctx { focusModule } <- ask
+    Ctx { mod } <- ask
     functionDef <-
-      focusModule
+      mod
         # lookupModule (Proxy :: Proxy "functionDefs") side.functionName
         # maybe (lift $ throwError (Exc { label: _error, source: "processSideHypothesis", description: "could not function definition of the name " <> show side.functionName })) pure
     result <- case functionDef of
@@ -419,7 +455,7 @@ compareProp ::
 compareProp (Prop p1 t1) (Prop p2 t2) = do
   unless (p1 == p2) do
     throwError (Exc { label: _compare, source: "compareProp", description: show p1 <> " != " <> show p2 })
-  Ctx { focusModule: Module { relations } } <- ask
+  Ctx { mod: Module { relations } } <- ask
   domain <- case Map.lookup p1 relations of
     Nothing -> Exc { label: _error, source: "compareProp", description: "could not find relation " <> show (show p1) } # throwError # lift
     Just (Relation { domain }) -> pure domain
@@ -447,8 +483,8 @@ compareTerm _lty (VarTerm x1) t2 = EQ /\ (Map.singleton x1 t2) # pure
 compareTerm _lty t1 (VarTerm x2) = EQ /\ (Map.singleton x2 t1) # pure
 
 compareTerm lty@(NamedLatticeType x) t1 t2 = do
-  Ctx { focusModule } <- ask
-  case lookupModule (Proxy :: Proxy "latticeTypeDefs") x focusModule of
+  Ctx { mod } <- ask
+  case lookupModule (Proxy :: Proxy "latticeTypeDefs") x mod of
     Nothing -> throwError (Exc { label: _compare, source: "comapreTerm " <> show lty <> " " <> show t1 <> " " <> show t2, description: "could not find lattice type definition with name " <> show x })
     Just latticeTypeDef -> case latticeTypeDef of
       LatticeTypeDef lty' -> do

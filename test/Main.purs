@@ -71,9 +71,9 @@ test_comparisons =
         )
         (Just GT)
   where
-  ctx = Ctx { modules: Map.singleton mainModuleName mainModule, focusModule: mainModule }
+  ctx = Ctx { mod  }
 
-  mainModule =
+  mod =
     Module
       { name: FixedName "Main"
       , doc: Nothing
@@ -138,7 +138,7 @@ test_comparisons =
 -- import Effect (Effect)
 -- import Effect.Aff (launchAff_)
 -- import Effect.Class.Console as Console
--- import Foliage.Interpretation (interpProgram)
+-- import Foliage.Interpretation (interpModule)
 -- import Test.Spec (Spec, describe, it)
 -- import Test.Spec.Assertions (shouldEqual)
 -- import Test.Spec.Reporter (consoleReporter)
@@ -187,7 +187,7 @@ test_comparisons =
 --       let
 --         handleLogs = traverse_ (Console.logShow <<< unwrap)
 --       props <-
---         interpProgram prog
+--         interpModule prog
 --           # ( runWriterT
 --                 >=> \(a /\ logs) -> do
 --                     logs # handleLogs

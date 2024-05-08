@@ -39,27 +39,7 @@ import Halogen.HTML as HH
 import Partial.Unsafe (unsafeCrashWith)
 import Record as Record
 
-data Program
-  = Program
-    { name :: FixedName
-    , doc :: Maybe String
-    , modules :: Map FixedName Module
-    }
-
-derive instance _Generic_Program :: Generic Program _
-
-instance _Eq_Program :: Eq Program where
-  eq x = genericEq x
-
-instance _Show_Program :: Show Program where
-  show x = genericShow x
-
 lookupModule label k = (\(Module mod) -> mod) >>> Record.get label >>> Map.lookup k
-
-getMainModule :: Program -> Module
-getMainModule (Program prog) = case Map.lookup mainModuleName prog.modules of
-  Nothing -> unsafeCrashWith $ "program " <> show prog.name <> " does not have a Main module"
-  Just mod -> mod
 
 data Module
   = Module
@@ -514,18 +494,6 @@ infixr 5 append_render as ⊕
 divs :: _ -> Array (RenderM Htmls) -> RenderM Htmls
 divs props = map (pure <<< HH.div props) <<< Array.fold
 
-instance _Render_Program :: Render Program where
-  render (Program prog) =
-    divs [ Style.style $ Style.flex_column <> [ "gap: 1.0em" ] ]
-      $ [ line (Punc "program" ⊕ prog.name ⊕ mempty)
-        , prog.doc # maybe mempty doc_block
-        , prog.modules
-            # map render
-            # Map.values
-            # Array.fromFoldable
-            # Array.fold
-        ]
-
 doc_block :: String -> RenderM Htmls
 doc_block s =
   [ HH.div [ Style.style $ Style.padding_small <> Style.font_prose <> [ "max-width: 30em", "background-color: rgba(0, 0, 0, 0.1)", "white-space: pre-wrap" ] ]
@@ -554,14 +522,14 @@ instance _Render_Module :: Render Module where
                   ExternalDataTypeDef str -> line (Punc "external" ⊕ Raw str ⊕ mempty)
           , mod.functionDefs
               # renderModDefinition (Punc "function" ⊕ mempty) case _ of
-                  ExternalFunctionDef def -> line (Raw def.name ⊕ Punc "(" ⊕ ((def.inputs <#> \(x /\ dty) -> Raw x ⊕ Punc ":" ⊕ dty ⊕ mempty) # Array.intercalate (Punc "," ⊕ mempty)) ⊕ Punc ")" ⊕ Punc "→" ⊕ def.output ⊕ mempty)
+                  ExternalFunctionDef def -> line (Punc "external" ⊕ Raw def.name ⊕ Punc "(" ⊕ ((def.inputs <#> \(x /\ dty) -> Raw x ⊕ Punc ":" ⊕ dty ⊕ mempty) # Array.intercalate (Punc "," ⊕ mempty)) ⊕ Punc ")" ⊕ Punc "→" ⊕ def.output ⊕ mempty)
           , mod.latticeTypeDefs
               # renderModDefinition (Punc "lattice type" ⊕ mempty) case _ of
                   LatticeTypeDef lty -> line (lty ⊕ mempty)
                   ExternalLatticeTypeDef def -> line (Punc "external" ⊕ Raw def.name ⊕ mempty)
           , mod.relations
               # renderModDefinition (Punc "relation" ⊕ mempty) \(Relation rel) -> do
-                  verbose <- line (Punc "ℛ" ⊕ rel.domain ⊕ mempty)
+                  verbose <- line (Punc "domain:" ⊕ rel.domain ⊕ mempty)
                   pretty <- line (Punc "notation:" ⊕ rel.render rel.canonical_term)
                   pure
                     [ HH.div [ Style.style $ Style.flex_column ]
@@ -668,7 +636,7 @@ instance _Render_Prim :: Render Prim where
 instance _Render_VarName :: Render VarName where
   render (VarName s i)
     | i == 0 = [ HH.text s ] # HH.span [ Style.style $ [ "color: darkgreen" ] ] # pure # pure
-  render (VarName s i) = [ HH.text s, HH.sub [] [ HH.text (show i) ] ] # HH.span [ Style.style $ [ "color: darkgreen" ] ] # pure # pure
+  render (VarName s i) = [ HH.text s, HH.sub [ Style.style $ [ "color: gray" ] ] [ HH.text (show i) ] ] # HH.span [ Style.style $ [ "color: darkgreen" ] ] # pure # pure
 
 instance _Render_FixedName :: Render FixedName where
   render (FixedName s) = [ HH.text s ] # HH.span [ Style.style $ [ "color: #808000" ] ] # pure # pure

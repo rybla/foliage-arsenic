@@ -27,11 +27,10 @@ import Halogen.HTML as HH
 import Type.Proxy (Proxy(..))
 import Unsafe as Unsafe
 
--- default_program = Example.Dijkstra.diamond
--- default_program = Example.Typing.test
--- default_program = Example.Parsing.nat
--- default_program = Example.Parsing.assoc
-default_program = Example.Typing.example
+-- default_mod = Example.Dijkstra.diamond
+-- default_mod = Example.Parsing.nat
+-- default_mod = Example.Parsing.assoc
+default_mod = Example.Typing.example
 
 data Action
   = EditorOutput Editor.Component.Output
@@ -41,24 +40,24 @@ data Action
 component :: forall query input output. Component query input output Aff
 component = mkComponent { initialState, eval, render }
   where
-  initialState input = { program: default_program # Lazy.force }
+  initialState _input = { mod: default_mod # Lazy.force }
 
   eval = mkEval defaultEval { handleAction = handleAction }
 
   handleAction = case _ of
     EditorOutput output -> case output of
-      Editor.Component.UpdatedProgram prog -> do
+      Editor.Component.UpdatedModule mod -> do
         -- clear output
-        H.modify_ _ { program = prog }
+        H.modify_ _ { mod = mod }
         H.tell _viewer unit (Viewer.Component.SetResult Nothing)
         H.tell _console unit (Console.Component.SetLogs [])
         pure unit
     ViewerOutput output -> case output of
       Viewer.Component.Ran -> do
-        prog <- H.request _editor unit Editor.Component.GetProgram <#> Unsafe.fromJust "editor must exist"
+        mod <- H.request _editor unit Editor.Component.GetModule <#> Unsafe.fromJust "editor must exist"
         H.tell _viewer unit (Viewer.Component.SetResult (Just (Viewer.Component.PendingResult)))
         Console.log "[App.run]"
-        ( Interpretation.interpProgram prog
+        ( Interpretation.interpModule mod
             # ( runWriterT
                   >=> \(a /\ logs) -> do
                       H.tell _console unit (SetLogs logs) # lift
@@ -90,11 +89,11 @@ component = mkComponent { initialState, eval, render }
           , HH.div [ Style.style $ [ "width: calc(100vw - 2em)", "height: calc(100vh - 5em)" ] <> Style.flex_row <> [ "gap: 0" ] ]
               [ HH.div [ Style.style $ [ "height: 100%", "width: 50%", "overflow: scroll" ] <> Style.flex_column ]
                   [ HH.div [ Style.style $ Style.padding_small ]
-                      [ HH.slot _editor unit Editor.Component.component { program: Just (default_program # Lazy.force) } EditorOutput ]
+                      [ HH.slot _editor unit Editor.Component.component { mod: Just (default_mod # Lazy.force) } EditorOutput ]
                   ]
               , HH.div [ Style.style $ [ "height: 100%", "width: 50%", "overflow: scroll" ] <> Style.flex_column ]
                   [ HH.div [ Style.style $ Style.padding_small ]
-                      [ HH.slot _viewer unit Viewer.Component.component { program: state.program } ViewerOutput ]
+                      [ HH.slot _viewer unit Viewer.Component.component { mod: state.mod } ViewerOutput ]
                   ]
               , HH.div [ Style.style $ [ "height: 100%", "width: 50%", "overflow: scroll" ] <> Style.flex_column ]
                   [ HH.div [ Style.style $ Style.padding_small ]

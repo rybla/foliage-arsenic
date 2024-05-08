@@ -33,7 +33,7 @@ import Type.Proxy (Proxy(..))
 --------------------------------------------------------------------------------
 -- Examples
 --------------------------------------------------------------------------------
-diamond :: Lazy Program
+diamond :: Lazy Module
 diamond =
   make_dijkstra "Diamond"
     ( Graph
@@ -47,7 +47,7 @@ diamond =
         }
     )
 
-cycle :: Lazy Program
+cycle :: Lazy Module
 cycle =
   make_dijkstra "Cycle"
     ( Graph
@@ -119,13 +119,13 @@ dtyWeight = NamedDataType (name `Homo.get` _.weight)
 
 dtyNode = NamedDataType (name `Homo.get` _.node)
 
-make_dijkstra :: String -> Graph -> Lazy Program
+make_dijkstra :: String -> Graph -> Lazy Module
 make_dijkstra label graph =
   Lazy.defer \_ ->
     let
       lex = ProductLatticeType FirstThenSecond_ProductLatticeTypeOrdering
     in
-      Program
+      Module
         { name: FixedName ("Dijstra . " <> label)
         , doc:
             """
@@ -133,85 +133,80 @@ This program implements Dijstra's algorithm for computing the shortest path in a
           """
               # String.trim
               # Just
-        , modules:
-            Map.singleton mainModuleName
-              ( Module
-                  { name: mainModuleName
-                  , doc: Nothing
-                  , initialGas: 50
-                  , dataTypeDefs:
-                      Map.fromFoldable
-                        [ (name `Homo.get` _.int) /\ ExternalDataTypeDef "Int"
-                        , (name `Homo.get` _.node) /\ DataTypeDef (NamedDataType (name `Homo.get` _.int))
-                        , (name `Homo.get` _.weight) /\ DataTypeDef (NamedDataType (name `Homo.get` _.int))
-                        ]
-                  , latticeTypeDefs:
-                      Map.fromFoldable
-                        [ (name `Homo.get` _.int) /\ ExternalLatticeTypeDef { name: "Int", compare_impl: compare `Homo.get` _."Int" }
-                        , (name `Homo.get` _.node) /\ LatticeTypeDef (DiscreteLatticeType (NamedLatticeType (name `Homo.get` _.int)))
-                        , (name `Homo.get` _.weight) /\ LatticeTypeDef (OppositeLatticeType (NamedLatticeType (name `Homo.get` _.int)))
-                        ]
-                  , functionDefs:
-                      Map.fromFoldable
-                        [ name `Homo.get` _.addWeight
-                            /\ ExternalFunctionDef
-                                { name: "addWeight"
-                                , inputs: [ "w1" /\ NamedDataType (name `Homo.get` _.weight), "w2" /\ NamedDataType (name `Homo.get` _.weight) ]
-                                , output: NamedDataType (name `Homo.get` _.weight)
-                                , impl: function `Homo.get` _.addWeight
-                                }
-                        ]
-                  , relations:
-                      Map.fromFoldable
-                        [ (name `Homo.get` _.edge)
-                            /\ Relation
-                                { domain: (ltyNode `lex` ltyNode) `lex` ltyWeight
-                                , render:
-                                    case _ of
-                                      PairTerm (PairTerm n1 n2) w -> do
-                                        w <- w ⊕ mempty
-                                        n1 <- n1 ⊕ mempty
-                                        n2 <- n2 ⊕ mempty
-                                        -- ➡
-                                        pure
-                                          [ HH.div [ Style.style [ "display: inline-flex", "flex-direction: row", "gap: 0.5em", "align-items: center", "justify-content: center" ] ]
-                                              [ HH.div [] n1
-                                              , HH.div [ Style.style [ "display: flex", "flex-direction: column", "gap: 0", "align-items: center", "justify-content: center" ] ]
-                                                  [ HH.div [ Style.style [ "margin-bottom: -1.2em", "font-size: 0.7em" ] ] w
-                                                  , HH.div [ Style.style [ "font-size: 1.5em" ] ] [ HH.text "⟶" ]
-                                                  ]
-                                              , HH.div [] n2
-                                              ]
-                                          ]
-                                      t -> unsafeCrashWith ("[render] invalid edge term: " <> show t)
-                                , canonical_term: (VarTerm (newVarName "n1") `pair` VarTerm (newVarName "n2")) `pair` VarTerm (newVarName "w")
-                                }
-                        , (name `Homo.get` _.dist)
-                            /\ Relation
-                                { domain: (ltyNode `lex` ltyNode) `lex` ltyWeight
-                                , render:
-                                    case _ of
-                                      PairTerm (PairTerm n1 n2) w -> do
-                                        w <- w ⊕ mempty
-                                        n1 <- n1 ⊕ mempty
-                                        n2 <- n2 ⊕ mempty
-                                        pure
-                                          [ HH.div [ Style.style [ "display: inline-flex", "flex-direction: row", "gap: 0.5em", "align-items: center", "justify-content: center" ] ]
-                                              [ HH.div [] n1
-                                              , HH.div [ Style.style [ "display: flex", "flex-direction: column", "gap: 0", "align-items: center", "justify-content: center" ] ]
-                                                  [ HH.div [ Style.style [ "margin-bottom: -0.8em", "font-size: 0.7em" ] ] w
-                                                  , HH.div [ Style.style [ "font-size: 1.5em" ] ] [ HH.text "⇒" ]
-                                                  ]
-                                              , HH.div [] n2
-                                              ]
-                                          ]
-                                      t -> unsafeCrashWith ("[render] invalid dist term: " <> show t)
-                                , canonical_term: (VarTerm (newVarName "n1") `pair` VarTerm (newVarName "n2")) `pair` VarTerm (newVarName "w")
-                                }
-                        ]
-                  , rules:
-                      Map.fromFoldable
-                        ( [ [ {-Tuple (name `Homo.get` _.edge)_distance
+        , initialGas: 50
+        , dataTypeDefs:
+            Map.fromFoldable
+              [ (name `Homo.get` _.int) /\ ExternalDataTypeDef "Int"
+              , (name `Homo.get` _.node) /\ DataTypeDef (NamedDataType (name `Homo.get` _.int))
+              , (name `Homo.get` _.weight) /\ DataTypeDef (NamedDataType (name `Homo.get` _.int))
+              ]
+        , latticeTypeDefs:
+            Map.fromFoldable
+              [ (name `Homo.get` _.int) /\ ExternalLatticeTypeDef { name: "Int", compare_impl: compare `Homo.get` _."Int" }
+              , (name `Homo.get` _.node) /\ LatticeTypeDef (DiscreteLatticeType (NamedLatticeType (name `Homo.get` _.int)))
+              , (name `Homo.get` _.weight) /\ LatticeTypeDef (OppositeLatticeType (NamedLatticeType (name `Homo.get` _.int)))
+              ]
+        , functionDefs:
+            Map.fromFoldable
+              [ name `Homo.get` _.addWeight
+                  /\ ExternalFunctionDef
+                      { name: "addWeight"
+                      , inputs: [ "w1" /\ NamedDataType (name `Homo.get` _.weight), "w2" /\ NamedDataType (name `Homo.get` _.weight) ]
+                      , output: NamedDataType (name `Homo.get` _.weight)
+                      , impl: function `Homo.get` _.addWeight
+                      }
+              ]
+        , relations:
+            Map.fromFoldable
+              [ (name `Homo.get` _.edge)
+                  /\ Relation
+                      { domain: (ltyNode `lex` ltyNode) `lex` ltyWeight
+                      , render:
+                          case _ of
+                            PairTerm (PairTerm n1 n2) w -> do
+                              w <- w ⊕ mempty
+                              n1 <- n1 ⊕ mempty
+                              n2 <- n2 ⊕ mempty
+                              -- ➡
+                              pure
+                                [ HH.div [ Style.style [ "display: inline-flex", "flex-direction: row", "gap: 0.5em", "align-items: center", "justify-content: center" ] ]
+                                    [ HH.div [] n1
+                                    , HH.div [ Style.style [ "display: flex", "flex-direction: column", "gap: 0", "align-items: center", "justify-content: center" ] ]
+                                        [ HH.div [ Style.style [ "margin-bottom: -1.2em", "font-size: 0.7em" ] ] w
+                                        , HH.div [ Style.style [ "font-size: 1.5em" ] ] [ HH.text "⟶" ]
+                                        ]
+                                    , HH.div [] n2
+                                    ]
+                                ]
+                            t -> unsafeCrashWith ("[render] invalid edge term: " <> show t)
+                      , canonical_term: (VarTerm (newVarName "n1") `pair` VarTerm (newVarName "n2")) `pair` VarTerm (newVarName "w")
+                      }
+              , (name `Homo.get` _.dist)
+                  /\ Relation
+                      { domain: (ltyNode `lex` ltyNode) `lex` ltyWeight
+                      , render:
+                          case _ of
+                            PairTerm (PairTerm n1 n2) w -> do
+                              w <- w ⊕ mempty
+                              n1 <- n1 ⊕ mempty
+                              n2 <- n2 ⊕ mempty
+                              pure
+                                [ HH.div [ Style.style [ "display: inline-flex", "flex-direction: row", "gap: 0.5em", "align-items: center", "justify-content: center" ] ]
+                                    [ HH.div [] n1
+                                    , HH.div [ Style.style [ "display: flex", "flex-direction: column", "gap: 0", "align-items: center", "justify-content: center" ] ]
+                                        [ HH.div [ Style.style [ "margin-bottom: -0.8em", "font-size: 0.7em" ] ] w
+                                        , HH.div [ Style.style [ "font-size: 1.5em" ] ] [ HH.text "⇒" ]
+                                        ]
+                                    , HH.div [] n2
+                                    ]
+                                ]
+                            t -> unsafeCrashWith ("[render] invalid dist term: " <> show t)
+                      , canonical_term: (VarTerm (newVarName "n1") `pair` VarTerm (newVarName "n2")) `pair` VarTerm (newVarName "w")
+                      }
+              ]
+        , rules:
+            Map.fromFoldable
+              ( [ [ {-Tuple (name `Homo.get` _.edge)_distance
                                 let
                                   { n1, n2, w } = { n1: wrap "n1", n2: wrap "n2", w: wrap "w" }
                                 in
@@ -222,29 +217,27 @@ This program implements Dijstra's algorithm for computing the shortest path in a
                                     , conclusion: Prop (name `Homo.get` _.dist) ((VarTerm n1 `PairTerm` VarTerm n2) `PairTerm` VarTerm w)
                                     }
                             , -} Tuple (name `Homo.get` _.append_edge_distance)
-                                let
-                                  { n1, n2, n3, w1, w2, w3 } = { n1: newVarName "n1", n2: newVarName "n2", n3: newVarName "n3", w1: newVarName "w1", w2: newVarName "w2", w3: newVarName "w3" }
-                                in
-                                  Rule
-                                    { hypotheses:
-                                        List.fromFoldable
-                                          [ Hypothesis (Prop (name `Homo.get` _.dist) ((VarTerm n1 `PairTerm` VarTerm n2) `PairTerm` VarTerm w1)) []
-                                          , Hypothesis (Prop (name `Homo.get` _.edge) ((VarTerm n2 `PairTerm` VarTerm n3) `PairTerm` VarTerm w2))
-                                              [ FunctionSideHypothesis
-                                                  { resultVarVarName: w3
-                                                  , functionName: name `Homo.get` _.addWeight
-                                                  , args: [ VarTerm w1, VarTerm w2 ]
-                                                  }
-                                              ]
-                                          ]
-                                    , conclusion: Prop (name `Homo.get` _.dist) ((VarTerm n1 `PairTerm` VarTerm n3) `PairTerm` VarTerm w3)
-                                    }
-                            ]
-                          , compileGraph graph
-                          ]
-                            # Array.concat
-                        )
-                  }
+                      let
+                        { n1, n2, n3, w1, w2, w3 } = { n1: newVarName "n1", n2: newVarName "n2", n3: newVarName "n3", w1: newVarName "w1", w2: newVarName "w2", w3: newVarName "w3" }
+                      in
+                        Rule
+                          { hypotheses:
+                              List.fromFoldable
+                                [ Hypothesis (Prop (name `Homo.get` _.dist) ((VarTerm n1 `PairTerm` VarTerm n2) `PairTerm` VarTerm w1)) []
+                                , Hypothesis (Prop (name `Homo.get` _.edge) ((VarTerm n2 `PairTerm` VarTerm n3) `PairTerm` VarTerm w2))
+                                    [ FunctionSideHypothesis
+                                        { resultVarVarName: w3
+                                        , functionName: name `Homo.get` _.addWeight
+                                        , args: [ VarTerm w1, VarTerm w2 ]
+                                        }
+                                    ]
+                                ]
+                          , conclusion: Prop (name `Homo.get` _.dist) ((VarTerm n1 `PairTerm` VarTerm n3) `PairTerm` VarTerm w3)
+                          }
+                  ]
+                , compileGraph graph
+                ]
+                  # Array.concat
               )
         }
 

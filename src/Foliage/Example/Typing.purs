@@ -20,6 +20,7 @@ import Data.List as List
 import Data.Map (Map)
 import Data.Map as Map
 import Data.Maybe (Maybe(..), maybe)
+import Data.String as String
 import Data.Tuple.Nested (type (/\), (/\))
 import Foliage.Common (Exc(..), Html, Opaque(..), Htmls, _error)
 import Foliage.Example.Library (left, pair, prod12, right, sumLir, termUnit)
@@ -31,11 +32,11 @@ import Record as Record
 import Type.Proxy (Proxy(..))
 import Unsafe (todo)
 
-example :: Lazy Program
+example :: Lazy Module
 example =
   Lazy.defer \_ ->
     let
-      -- input = term_Var (LiteralTerm "0" dty_Int)
+      input = term_Var (LiteralTerm "0" dty_Int)
       -- input = term_Lam (term_Var (LiteralTerm "0" dty_Int))
       -- input = term_Lam (term_Lam (term_Var (LiteralTerm "0" dty_Int))) -- ignore
       -- input = term_Lam (term_Lam (term_Var (LiteralTerm "1" dty_Int))) -- const
@@ -53,162 +54,177 @@ example =
       --       (term_Lam (term_Var (LiteralTerm "0" dty_Int)))
       --     `term_App`
       --       (term_Lam (term_Var (LiteralTerm "0" dty_Int)))
-      input = term_Var (LiteralTerm "1" dty_Int) `term_App` term_Var (LiteralTerm "0" dty_Int)
+    -- input = term_Var (LiteralTerm "1" dty_Int) `term_App` term_Var (LiteralTerm "0" dty_Int)
     in
-      Program
+      Module
         { name: FixedName "Typing . Simply-Typed Lambda Calculus"
-        , doc: Just "TODO"
-        , modules:
-            Map.singleton mainModuleName
-              ( Module
-                  { name: mainModuleName
-                  , doc: Nothing
-                  , initialGas: 40
-                  , dataTypeDefs:
-                      [ dtyd_Int
-                      , dtyd_String
-                      ]
-                        # Map.fromFoldable
-                  , latticeTypeDefs:
-                      [ [ ltyd_Int
-                        , ltyd_String
-                        , ltyd_Symbol
-                        , ltyd_Index
-                        ]
-                      , [ ltyd_Term
-                        , ltyd_Type
-                        , ltyd_Context
-                        ]
-                      ]
-                        # Array.concat
-                        # Map.fromFoldable
-                  , functionDefs:
-                      []
-                        # Map.fromFoldable
-                  , relations:
-                      [ relation_Parsed
-                      , relation_Typed
-                      ]
-                        # Map.fromFoldable
-                  , rules:
-                      [ [ FixedName "var 0"
-                            /\ let
-                                i0 = VarTerm (newVarName "i0")
+        , doc:
+            """
+This program implements type-inference for the following language:
 
-                                i1 = VarTerm (newVarName "i1")
+  α ,        Γ ⊢ @0 : α
+  α , β ,    Γ ⊢ @1 : β
+  α , β , δ, Γ ⊢ @2 : δ
+  
+  α, Γ ⊢ b : β
+  ––––––––––––
+  Γ ⊢ λ b : α → β
+  
+  Γ ⊢ f : α → β
+  Γ ⊢ a : α
+  ––––––––––––
+  Γ ⊢ f a : β
 
-                                tm = term_Var (LiteralTerm "0" dty_Int)
+Note that the language doesn't have type variables -- those arise in the implementation as meta-variables.
+"""
+              # String.trim
+              # Just
+        , initialGas: 40
+        , dataTypeDefs:
+            [ dtyd_Int
+            , dtyd_String
+            ]
+              # Map.fromFoldable
+        , latticeTypeDefs:
+            [ [ ltyd_Int
+              , ltyd_String
+              , ltyd_Symbol
+              , ltyd_Index
+              ]
+            , [ ltyd_Term
+              , ltyd_Type
+              , ltyd_Context
+              ]
+            ]
+              # Array.concat
+              # Map.fromFoldable
+        , functionDefs:
+            []
+              # Map.fromFoldable
+        , relations:
+            [ relation_Parsed
+            , relation_Typed
+            ]
+              # Map.fromFoldable
+        , rules:
+            [ [ FixedName "var 0"
+                  /\ let
+                      i0 = VarTerm (newVarName "i0")
 
-                                ty = VarTerm (newVarName "α")
+                      i1 = VarTerm (newVarName "i1")
 
-                                ctx = context_Cons ty (VarTerm (newVarName "Γ"))
-                              in
-                                Rule
-                                  { hypotheses: [ Hypothesis (prop_Parsed { i0, i1, tm }) [] ] # List.fromFoldable
-                                  , conclusion: prop_Typed { i0, i1, tm, ty, ctx }
-                                  }
-                        , FixedName "var 1"
-                            /\ let
-                                i0 = VarTerm (newVarName "i0")
+                      tm = term_Var (LiteralTerm "0" dty_Int)
 
-                                i1 = VarTerm (newVarName "i1")
+                      ty = VarTerm (newVarName "α")
 
-                                tm = term_Var (LiteralTerm "1" dty_Int)
+                      ctx = context_Cons ty (VarTerm (newVarName "Γ"))
+                    in
+                      Rule
+                        { hypotheses: [ Hypothesis (prop_Parsed { i0, i1, tm }) [] ] # List.fromFoldable
+                        , conclusion: prop_Typed { i0, i1, tm, ty, ctx }
+                        }
+              , FixedName "var 1"
+                  /\ let
+                      i0 = VarTerm (newVarName "i0")
 
-                                α = VarTerm (newVarName "α")
+                      i1 = VarTerm (newVarName "i1")
 
-                                β = VarTerm (newVarName "β")
+                      tm = term_Var (LiteralTerm "1" dty_Int)
 
-                                ctx = β `context_Cons` (α `context_Cons` VarTerm (newVarName "Γ"))
-                              in
-                                Rule
-                                  { hypotheses: [ Hypothesis (prop_Parsed { i0, i1, tm }) [] ] # List.fromFoldable
-                                  , conclusion: prop_Typed { i0, i1, tm, ty: α, ctx }
-                                  }
-                        , FixedName "var 2"
-                            /\ let
-                                i0 = VarTerm (newVarName "i0")
+                      α = VarTerm (newVarName "α")
 
-                                i1 = VarTerm (newVarName "i1")
+                      β = VarTerm (newVarName "β")
 
-                                tm = term_Var (LiteralTerm "2" dty_Int)
+                      ctx = β `context_Cons` (α `context_Cons` VarTerm (newVarName "Γ"))
+                    in
+                      Rule
+                        { hypotheses: [ Hypothesis (prop_Parsed { i0, i1, tm }) [] ] # List.fromFoldable
+                        , conclusion: prop_Typed { i0, i1, tm, ty: α, ctx }
+                        }
+              , FixedName "var 2"
+                  /\ let
+                      i0 = VarTerm (newVarName "i0")
 
-                                α = VarTerm (newVarName "α")
+                      i1 = VarTerm (newVarName "i1")
 
-                                β = VarTerm (newVarName "β")
+                      tm = term_Var (LiteralTerm "2" dty_Int)
 
-                                γ = VarTerm (newVarName "γ")
+                      α = VarTerm (newVarName "α")
 
-                                ctx = γ `context_Cons` (β `context_Cons` (α `context_Cons` VarTerm (newVarName "Γ")))
-                              in
-                                Rule
-                                  { hypotheses: [ Hypothesis (prop_Parsed { i0, i1, tm }) [] ] # List.fromFoldable
-                                  , conclusion: prop_Typed { i0, i1, tm, ty: α, ctx }
-                                  }
-                        , FixedName "lam"
-                            /\ let
-                                i0 = VarTerm (newVarName "i0")
+                      β = VarTerm (newVarName "β")
 
-                                i1 = VarTerm (newVarName "i1")
+                      γ = VarTerm (newVarName "γ")
 
-                                i2 = VarTerm (newVarName "i2")
+                      ctx = γ `context_Cons` (β `context_Cons` (α `context_Cons` VarTerm (newVarName "Γ")))
+                    in
+                      Rule
+                        { hypotheses: [ Hypothesis (prop_Parsed { i0, i1, tm }) [] ] # List.fromFoldable
+                        , conclusion: prop_Typed { i0, i1, tm, ty: α, ctx }
+                        }
+              , FixedName "lam"
+                  /\ let
+                      i0 = VarTerm (newVarName "i0")
 
-                                i3 = VarTerm (newVarName "i3")
+                      i1 = VarTerm (newVarName "i1")
 
-                                α = VarTerm (newVarName "α")
+                      i2 = VarTerm (newVarName "i2")
 
-                                β = VarTerm (newVarName "β")
+                      i3 = VarTerm (newVarName "i3")
 
-                                b = VarTerm (newVarName "b")
+                      α = VarTerm (newVarName "α")
 
-                                ctx = VarTerm (newVarName "Γ")
-                              in
-                                Rule
-                                  { hypotheses:
-                                      [ Hypothesis (prop_Parsed { i0: i0, i1: i3, tm: term_Lam b }) []
-                                      , Hypothesis (prop_Typed { i0: i1, i1: i2, tm: b, ctx: context_Cons α ctx, ty: β }) []
-                                      ]
-                                        # List.fromFoldable
-                                  , conclusion: prop_Typed { i0: i0, i1: i3, tm: term_Lam b, ty: type_Arr α β, ctx: ctx }
-                                  }
-                        , FixedName "app"
-                            /\ let
-                                i0 = VarTerm (newVarName "i0")
+                      β = VarTerm (newVarName "β")
 
-                                i1 = VarTerm (newVarName "i1")
+                      b = VarTerm (newVarName "b")
 
-                                i2 = VarTerm (newVarName "i2")
+                      ctx = VarTerm (newVarName "Γ")
+                    in
+                      Rule
+                        { hypotheses:
+                            [ Hypothesis (prop_Parsed { i0: i0, i1: i3, tm: term_Lam b }) []
+                            , Hypothesis (prop_Typed { i0: i1, i1: i2, tm: b, ctx: context_Cons α ctx, ty: β }) []
+                            ]
+                              # List.fromFoldable
+                        , conclusion: prop_Typed { i0: i0, i1: i3, tm: term_Lam b, ty: type_Arr α β, ctx: ctx }
+                        }
+              , FixedName "app"
+                  /\ let
+                      i0 = VarTerm (newVarName "i0")
 
-                                i3 = VarTerm (newVarName "i3")
+                      i1 = VarTerm (newVarName "i1")
 
-                                i4 = VarTerm (newVarName "i4")
+                      i2 = VarTerm (newVarName "i2")
 
-                                α = VarTerm (newVarName "α")
+                      i3 = VarTerm (newVarName "i3")
 
-                                β = VarTerm (newVarName "β")
+                      i4 = VarTerm (newVarName "i4")
 
-                                f = VarTerm (newVarName "f")
+                      i5 = VarTerm (newVarName "i5")
 
-                                a = VarTerm (newVarName "a")
+                      α = VarTerm (newVarName "α")
 
-                                ctx = VarTerm (newVarName "Γ")
-                              in
-                                Rule
-                                  { hypotheses:
-                                      [ Hypothesis (prop_Parsed { i0: i0, i1: i4, tm: term_App f a }) []
-                                      , Hypothesis (prop_Typed { i0: i1, i1: i2, tm: f, ctx, ty: type_Arr α β }) []
-                                      , Hypothesis (prop_Typed { i0: i3, i1: i4, tm: a, ctx, ty: α }) []
-                                      ]
-                                        # List.fromFoldable
-                                  , conclusion: prop_Typed { i0: i0, i1: i4, tm: term_App f a, ty: β, ctx: ctx }
-                                  }
-                        ]
-                      , compileInput input
-                      ]
-                        # Array.concat
-                        # Map.fromFoldable
-                  }
-              )
+                      β = VarTerm (newVarName "β")
+
+                      f = VarTerm (newVarName "f")
+
+                      a = VarTerm (newVarName "a")
+
+                      ctx = VarTerm (newVarName "Γ")
+                    in
+                      Rule
+                        { hypotheses:
+                            [ Hypothesis (prop_Parsed { i0: i0, i1: i5, tm: term_App f a }) []
+                            , Hypothesis (prop_Typed { i0: i1, i1: i2, tm: f, ctx, ty: type_Arr α β }) []
+                            , Hypothesis (prop_Typed { i0: i3, i1: i4, tm: a, ctx, ty: α }) []
+                            ]
+                              # List.fromFoldable
+                        , conclusion: prop_Typed { i0: i0, i1: i5, tm: term_App f a, ty: β, ctx: ctx }
+                        }
+              ]
+            , compileInput input
+            ]
+              # Array.concat
+              # Map.fromFoldable
         }
 
 compileInput :: Term -> Array (FixedName /\ Rule)
