@@ -36,13 +36,13 @@ example :: Lazy Module
 example =
   Lazy.defer \_ ->
     let
-      input = term_Var (LiteralTerm "0" dty_Int)
-      -- input = term_Lam (term_Var (LiteralTerm "0" dty_Int))
-      -- input = term_Lam (term_Lam (term_Var (LiteralTerm "0" dty_Int))) -- ignore
-      -- input = term_Lam (term_Lam (term_Var (LiteralTerm "1" dty_Int))) -- const
-      -- input =
-      --   -- (λλ(0 1) λ0 λ0) : a -> a
+      input_str /\ input = "@0" /\ term_Var (LiteralTerm "0" dty_Int)
+      -- input_str /\ input = "λ @0" /\ term_Lam (term_Var (LiteralTerm "0" dty_Int))
+      -- input_str /\ input = "λ λ @0" /\ term_Lam (term_Lam (term_Var (LiteralTerm "0" dty_Int))) -- ignore
+      -- input_str /\ input = "λ λ @1" /\ term_Lam (term_Lam (term_Var (LiteralTerm "1" dty_Int))) -- const
+      -- input_str /\ input =
       --   -- (fun f => fun x => f x) (fun x => x) (fun x => x) : a -> a 
+      --   "((λ λ (@0 @1) λ @0) λ @0)" /\
       --   term_Lam
       --     ( term_Lam
       --         ( term_Var (LiteralTerm "1" dty_Int)
@@ -54,7 +54,7 @@ example =
       --       (term_Lam (term_Var (LiteralTerm "0" dty_Int)))
       --     `term_App`
       --       (term_Lam (term_Var (LiteralTerm "0" dty_Int)))
-    -- input = term_Var (LiteralTerm "1" dty_Int) `term_App` term_Var (LiteralTerm "0" dty_Int)
+    -- input_str /\ input = "(@1 @0)" /\ term_Var (LiteralTerm "1" dty_Int) `term_App` term_Var (LiteralTerm "0" dty_Int)
     in
       Module
         { name: FixedName "Typing . Simply-Typed Lambda Calculus"
@@ -76,6 +76,8 @@ This program implements type-inference for the following language:
   Γ ⊢ f a : β
 
 Note that the language doesn't have type variables -- those arise in the implementation as meta-variables.
+
+Parsed input: """ <> input_str <> """
 """
               # String.trim
               # Just
@@ -434,6 +436,6 @@ compare_String =
 
 ltyd_String = FixedName "String" /\ ExternalLatticeTypeDef { name: "String", compare_impl: compare_String }
 
-ltyd_Index = FixedName "Index" /\ LatticeTypeDef (DiscreteLatticeType lty_Int)
+ltyd_Index = FixedName "Index" /\ LatticeTypeDef (FlatLatticeType lty_Int)
 
-ltyd_Symbol = FixedName "Symbol" /\ LatticeTypeDef (DiscreteLatticeType lty_String)
+ltyd_Symbol = FixedName "Symbol" /\ LatticeTypeDef (FlatLatticeType lty_String)

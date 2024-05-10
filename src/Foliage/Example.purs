@@ -10,8 +10,8 @@ import Foliage.Program (Module)
 examples :: Array (String /\ Lazy Module)
 examples =
   [ "Blank" /\ Blank.blank
-  , "Dijkstra . Diamond" /\ Dijkstra.diamond
-  , "Dijkstra . Cycle" /\ Dijkstra.cycle
+  , "Graph Distance . Diamond" /\ Dijkstra.diamond
+  , "Graph Distance . Cycle" /\ Dijkstra.cycle
   -- , "Parsing . ABC" /\ Parsing.abc
   , "Parsing . Nat" /\ Parsing.nat
   -- , "Parsing . Binary Tree" /\ Parsing.binary_tree

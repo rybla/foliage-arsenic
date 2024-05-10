@@ -55,7 +55,7 @@ component = H.mkComponent { initialState, eval, render }
       , HH.div [ Style.style $ (if state.open then [] else Style.hidden) <> [ "position: relative" ] ]
           [ HH.div
               [ HE.onMouseLeave MouseLeave
-              , Style.style $ Style.flex_column <> [ "position: absolute", "top: 0.5em", "max-height: 16em", "overflow-y: scroll", "background-color: white" ] <> Style.rounded <> Style.shadowed
+              , Style.style $ Style.flex_column <> [ "position: absolute", "top: 0.5em", "max-height: 16em", "overflow-y: scroll", "background-color: gray" ] <> Style.rounded <> Style.shadowed
               ]
               ( state.items
                   <#> \(label /\ output) ->

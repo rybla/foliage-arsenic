@@ -110,7 +110,7 @@ data LatticeType
   | ProductLatticeType ProductLatticeTypeOrdering LatticeType LatticeType
   | SetLatticeType SetOrdering LatticeType
   | OppositeLatticeType LatticeType
-  | DiscreteLatticeType LatticeType
+  | FlatLatticeType LatticeType
   | PowerLatticeType LatticeType
 
 derive instance _Generic_LatticeType :: Generic LatticeType _
@@ -524,7 +524,7 @@ instance _Render_Module :: Render Module where
               # renderModDefinition (Punc "function" ⊕ mempty) case _ of
                   ExternalFunctionDef def -> line (Punc "external" ⊕ Raw def.name ⊕ Punc "(" ⊕ ((def.inputs <#> \(x /\ dty) -> Raw x ⊕ Punc ":" ⊕ dty ⊕ mempty) # Array.intercalate (Punc "," ⊕ mempty)) ⊕ Punc ")" ⊕ Punc "→" ⊕ def.output ⊕ mempty)
           , mod.latticeTypeDefs
-              # renderModDefinition (Punc "lattice type" ⊕ mempty) case _ of
+              # renderModDefinition (Punc "partially ordered type" ⊕ mempty) case _ of
                   LatticeTypeDef lty -> line (lty ⊕ mempty)
                   ExternalLatticeTypeDef def -> line (Punc "external" ⊕ Raw def.name ⊕ mempty)
           , mod.relations
@@ -590,7 +590,7 @@ instance _Render_LatticeType :: Render LatticeType where
         FirstThenSecond_ProductLatticeTypeOrdering -> "1,2"
     SetLatticeType o d -> Prim "Set" ⊕ Punc "(" ⊕ d ⊕ Punc ")" ⊕ mempty
     OppositeLatticeType l -> Prim "Opposite" ⊕ Punc "(" ⊕ l ⊕ Punc ")" ⊕ mempty
-    DiscreteLatticeType l -> Prim "Discrete" ⊕ Punc "(" ⊕ l ⊕ Punc ")" ⊕ mempty
+    FlatLatticeType l -> Prim "Flat" ⊕ Punc "(" ⊕ l ⊕ Punc ")" ⊕ mempty
     PowerLatticeType l -> Prim "Power" ⊕ Punc "(" ⊕ l ⊕ Punc ")" ⊕ mempty
 
 instance _Render_DataType :: Render DataType where

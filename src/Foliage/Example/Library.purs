@@ -99,8 +99,8 @@ latticeTypeDefs =
                     pure (Prelude.compare s1 s2 /\ empty)
                 t1 /\ t2 -> throwError (Exc { label: _error, source: "compare.String", description: "inputs are not literal Strings: " <> show t1 <> ", " <> show t2 })
           }
-  , name."Index" /\ LatticeTypeDef (DiscreteLatticeType (NamedLatticeType name."Int"))
-  , name."Symbol" /\ LatticeTypeDef (DiscreteLatticeType (NamedLatticeType name."String"))
+  , name."Index" /\ LatticeTypeDef (FlatLatticeType (NamedLatticeType name."Int"))
+  , name."Symbol" /\ LatticeTypeDef (FlatLatticeType (NamedLatticeType name."String"))
   ]
     # Map.fromFoldable
 

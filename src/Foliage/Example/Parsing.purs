@@ -287,9 +287,9 @@ dataTypeDef_String = name."String" /\ ExternalDataTypeDef "String"
 
 latticeTypeDef_String = name."String" /\ ExternalLatticeTypeDef { name: "String", compare_impl: compare."String" }
 
-latticeTypeDef_Index = name."Index" /\ LatticeTypeDef (DiscreteLatticeType ltyInt)
+latticeTypeDef_Index = name."Index" /\ LatticeTypeDef (FlatLatticeType ltyInt)
 
-latticeTypeDef_Symbol = name."Symbol" /\ LatticeTypeDef (DiscreteLatticeType ltyString)
+latticeTypeDef_Symbol = name."Symbol" /\ LatticeTypeDef (FlatLatticeType ltyString)
 
 relation_Token =
   name."Token"

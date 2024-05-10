@@ -424,7 +424,7 @@ module Foliage.InterpretationOld where
 --         EQ /\ sigma -> EQ /\ sigma # pure
 --         GT /\ sigma -> GT /\ sigma # pure
 
--- compareTerm (DiscreteLatticeType lty) t1 t2 =
+-- compareTerm (FlatLatticeType lty) t1 t2 =
 --   compareTerm lty t1 t2
 --     >>= case _ of
 --         LT /\ _sigma -> empty

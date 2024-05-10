@@ -126,10 +126,10 @@ make_dijkstra label graph =
       lex = ProductLatticeType FirstThenSecond_ProductLatticeTypeOrdering
     in
       Module
-        { name: FixedName ("Dijstra . " <> label)
+        { name: FixedName ("Graph Distance . " <> label)
         , doc:
             """
-This program implements Dijstra's algorithm for computing the shortest path in a graph from a starting node to any other node in the graph.
+This program computes the shortest path in a graph from a starting node to any other node in the graph.
           """
               # String.trim
               # Just
@@ -143,7 +143,7 @@ This program implements Dijstra's algorithm for computing the shortest path in a
         , latticeTypeDefs:
             Map.fromFoldable
               [ (name `Homo.get` _.int) /\ ExternalLatticeTypeDef { name: "Int", compare_impl: compare `Homo.get` _."Int" }
-              , (name `Homo.get` _.node) /\ LatticeTypeDef (DiscreteLatticeType (NamedLatticeType (name `Homo.get` _.int)))
+              , (name `Homo.get` _.node) /\ LatticeTypeDef (FlatLatticeType (NamedLatticeType (name `Homo.get` _.int)))
               , (name `Homo.get` _.weight) /\ LatticeTypeDef (OppositeLatticeType (NamedLatticeType (name `Homo.get` _.int)))
               ]
         , functionDefs:
@@ -244,7 +244,7 @@ This program implements Dijstra's algorithm for computing the shortest path in a
 --------------------------------------------------------------------------------
 -- Intermediate graph representation
 --------------------------------------------------------------------------------
--- | Directed Graph, encoded by the head node (where Dijstra's algorithm starts)
+-- | Directed Graph, encoded by the head node (where the algorithm starts)
 -- | and edges each encode in the following form:
 -- | 
 -- | ```
@@ -265,7 +265,7 @@ compileGraph (Graph { start_node: n, edges: es }) =
     (es <#> f)
   where
   f ((n1 /\ n2) /\ w) =
-    (FixedName (show n1 <> " → " <> show n2))
+    (FixedName ("edge " <> "[" <> show n1 <> " → " <> show n2 <> "]"))
       /\ Rule
           { hypotheses: Nil
           , conclusion: Prop (name `Homo.get` _.edge) ((LiteralTerm (show n1) (NamedDataType (name `Homo.get` _.int)) `PairTerm` LiteralTerm (show n2) (NamedDataType (name `Homo.get` _.int))) `PairTerm` LiteralTerm (show w) (NamedDataType (name `Homo.get` _.int)))

@@ -8105,9 +8105,9 @@
       return "OppositeLatticeType";
     }
   };
-  var DiscreteLatticeTypeIsSymbol = {
+  var FlatLatticeTypeIsSymbol = {
     reflectSymbol: function() {
-      return "DiscreteLatticeType";
+      return "FlatLatticeType";
     }
   };
   var PowerLatticeTypeIsSymbol = {
@@ -8362,15 +8362,15 @@
     };
     return OppositeLatticeType2;
   }();
-  var DiscreteLatticeType = /* @__PURE__ */ function() {
-    function DiscreteLatticeType2(value0) {
+  var FlatLatticeType = /* @__PURE__ */ function() {
+    function FlatLatticeType2(value0) {
       this.value0 = value0;
     }
     ;
-    DiscreteLatticeType2.create = function(value0) {
-      return new DiscreteLatticeType2(value0);
+    FlatLatticeType2.create = function(value0) {
+      return new FlatLatticeType2(value0);
     };
-    return DiscreteLatticeType2;
+    return FlatLatticeType2;
   }();
   var PowerLatticeType = /* @__PURE__ */ function() {
     function PowerLatticeType2(value0) {
@@ -8913,8 +8913,8 @@
         return append_render5("Opposite")(append_render4("(")(append_render(_Render_LatticeType)(v.value0)(append_render4(")")(mempty2))));
       }
       ;
-      if (v instanceof DiscreteLatticeType) {
-        return append_render5("Discrete")(append_render4("(")(append_render(_Render_LatticeType)(v.value0)(append_render4(")")(mempty2))));
+      if (v instanceof FlatLatticeType) {
+        return append_render5("Flat")(append_render4("(")(append_render(_Render_LatticeType)(v.value0)(append_render4(")")(mempty2))));
       }
       ;
       if (v instanceof PowerLatticeType) {
@@ -9024,7 +9024,7 @@
           return line(append_render4("external")(append_render3(v1.value0.name)(append_render4("(")(append_render2(intercalate5(append_render4(",")(mempty2))(mapFlipped3(v1.value0.inputs)(function(v2) {
             return append_render3(v2.value0)(append_render4(":")(append_render10(v2.value1)(mempty2)));
           })))(append_render4(")")(append_render4("\u2192")(append_render10(v1.value0.output)(mempty2))))))));
-        })(v.value0.functionDefs), renderModDefinition(append_render4("lattice type")(mempty2))(function(v1) {
+        })(v.value0.functionDefs), renderModDefinition(append_render4("partially ordered type")(mempty2))(function(v1) {
           if (v1 instanceof LatticeTypeDef) {
             return line(append_render9(v1.value0)(mempty2));
           }
@@ -9033,7 +9033,7 @@
             return line(append_render4("external")(append_render3(v1.value0.name)(mempty2)));
           }
           ;
-          throw new Error("Failed pattern match at Foliage.Program (line 527, column 68 - line 529, column 95): " + [v1.constructor.name]);
+          throw new Error("Failed pattern match at Foliage.Program (line 527, column 78 - line 529, column 95): " + [v1.constructor.name]);
         })(v.value0.latticeTypeDefs), renderModDefinition(append_render4("relation")(mempty2))(function(v1) {
           return bind3(line(append_render4("domain:")(append_render9(v1.value0.domain)(mempty2))))(function(verbose) {
             return bind3(line(append_render4("notation:")(v1.value0.render(v1.value0.canonical_term))))(function(pretty) {
@@ -9286,7 +9286,7 @@
       }
       ;
       if (x instanceof Inr && (x.value0 instanceof Inr && (x.value0.value0 instanceof Inr && (x.value0.value0.value0 instanceof Inr && (x.value0.value0.value0.value0 instanceof Inr && (x.value0.value0.value0.value0.value0 instanceof Inr && x.value0.value0.value0.value0.value0.value0 instanceof Inl)))))) {
-        return new DiscreteLatticeType(x.value0.value0.value0.value0.value0.value0.value0);
+        return new FlatLatticeType(x.value0.value0.value0.value0.value0.value0.value0);
       }
       ;
       if (x instanceof Inr && (x.value0 instanceof Inr && (x.value0.value0 instanceof Inr && (x.value0.value0.value0 instanceof Inr && (x.value0.value0.value0.value0 instanceof Inr && (x.value0.value0.value0.value0.value0 instanceof Inr && x.value0.value0.value0.value0.value0.value0 instanceof Inr)))))) {
@@ -9320,7 +9320,7 @@
         return new Inr(new Inr(new Inr(new Inr(new Inr(new Inl(x.value0))))));
       }
       ;
-      if (x instanceof DiscreteLatticeType) {
+      if (x instanceof FlatLatticeType) {
         return new Inr(new Inr(new Inr(new Inr(new Inr(new Inr(new Inl(x.value0)))))));
       }
       ;
@@ -9334,7 +9334,7 @@
   var genericShow5 = /* @__PURE__ */ genericShow(_Generic_LatticeType);
   var _Show_LatticeType = {
     show: function(x) {
-      return genericShow5(genericShowSum3(genericShowSum2(genericShowSum(genericShowConstructor(genericShowArgsProduct22(genericShowArgsProduct(genericShowArgsArgument(_Show_LatticeType))(genericShowArgsArgument(_Show_LatticeType))))(SumLatticeTypeIsSymbol))(genericShowSum(genericShowConstructor(genericShowArgsProduct4(genericShowArgsProduct(genericShowArgsArgument(_Show_LatticeType))(genericShowArgsArgument(_Show_LatticeType))))(ProductLatticeTypeIsSymbol))(genericShowSum(genericShowConstructor(genericShowArgsProduct3(genericShowArgsArgument(_Show_LatticeType)))(SetLatticeTypeIsSymbol))(genericShowSum(genericShowConstructor(genericShowArgsArgument(_Show_LatticeType))(OppositeLatticeTypeIsSymbol))(genericShowSum(genericShowConstructor(genericShowArgsArgument(_Show_LatticeType))(DiscreteLatticeTypeIsSymbol))(genericShowConstructor(genericShowArgsArgument(_Show_LatticeType))(PowerLatticeTypeIsSymbol)))))))))(x);
+      return genericShow5(genericShowSum3(genericShowSum2(genericShowSum(genericShowConstructor(genericShowArgsProduct22(genericShowArgsProduct(genericShowArgsArgument(_Show_LatticeType))(genericShowArgsArgument(_Show_LatticeType))))(SumLatticeTypeIsSymbol))(genericShowSum(genericShowConstructor(genericShowArgsProduct4(genericShowArgsProduct(genericShowArgsArgument(_Show_LatticeType))(genericShowArgsArgument(_Show_LatticeType))))(ProductLatticeTypeIsSymbol))(genericShowSum(genericShowConstructor(genericShowArgsProduct3(genericShowArgsArgument(_Show_LatticeType)))(SetLatticeTypeIsSymbol))(genericShowSum(genericShowConstructor(genericShowArgsArgument(_Show_LatticeType))(OppositeLatticeTypeIsSymbol))(genericShowSum(genericShowConstructor(genericShowArgsArgument(_Show_LatticeType))(FlatLatticeTypeIsSymbol))(genericShowConstructor(genericShowArgsArgument(_Show_LatticeType))(PowerLatticeTypeIsSymbol)))))))))(x);
     }
   };
   var _Generic_HypothesisF = {
@@ -10633,7 +10633,7 @@
   }();
   var compileGraph = function(v) {
     var f = function(v1) {
-      return new Tuple(show5(v1.value0.value0) + (" \u2192 " + show5(v1.value0.value1)), new Rule({
+      return new Tuple("edge " + ("[" + (show5(v1.value0.value0) + (" \u2192 " + (show5(v1.value0.value1) + "]")))), new Rule({
         hypotheses: Nil.value,
         conclusion: new Prop(get6(name3)(function(v2) {
           return v2.edge;
@@ -10695,8 +10695,8 @@
       return defer2(function(v) {
         var lex = ProductLatticeType.create(FirstThenSecond_ProductLatticeTypeOrdering.value);
         return new Module({
-          name: "Dijstra . " + label5,
-          doc: new Just(trim("\nThis program implements Dijstra's algorithm for computing the shortest path in a graph from a starting node to any other node in the graph.\n          ")),
+          name: "Graph Distance . " + label5,
+          doc: new Just(trim("\nThis program computes the shortest path in a graph from a starting node to any other node in the graph.\n          ")),
           initialGas: 50,
           dataTypeDefs: fromFoldable7([new Tuple(get6(name3)(function(v1) {
             return v1["int"];
@@ -10718,7 +10718,7 @@
             })
           })), new Tuple(get6(name3)(function(v1) {
             return v1.node;
-          }), new LatticeTypeDef(new DiscreteLatticeType(new NamedLatticeType(get6(name3)(function(v1) {
+          }), new LatticeTypeDef(new FlatLatticeType(new NamedLatticeType(get6(name3)(function(v1) {
             return v1["int"];
           }))))), new Tuple(get6(name3)(function(v1) {
             return v1.weight;
@@ -11368,10 +11368,10 @@
                 });
               }
               ;
-              if (v instanceof DiscreteLatticeType) {
+              if (v instanceof FlatLatticeType) {
                 return bind9(compareTerm(dictMonadThrow)(dictMonadReader)(dictMonadWriter)(v.value0)(v1)(v2))(function(v32) {
                   if (v32.value0 instanceof LT) {
-                    return throwError_compareTerm1(new DiscreteLatticeType(v.value0))(v1)(v2);
+                    return throwError_compareTerm1(new FlatLatticeType(v.value0))(v1)(v2);
                   }
                   ;
                   if (v32.value0 instanceof EQ) {
@@ -11379,10 +11379,10 @@
                   }
                   ;
                   if (v32.value0 instanceof GT) {
-                    return throwError_compareTerm1(new DiscreteLatticeType(v.value0))(v1)(v2);
+                    return throwError_compareTerm1(new FlatLatticeType(v.value0))(v1)(v2);
                   }
                   ;
-                  throw new Error("Failed pattern match at Foliage.Interpretation (line 554, column 9 - line 557, column 79): " + [v32.constructor.name]);
+                  throw new Error("Failed pattern match at Foliage.Interpretation (line 554, column 9 - line 557, column 75): " + [v32.constructor.name]);
                 });
               }
               ;
@@ -12234,10 +12234,10 @@
                     }))));
                   }
                   ;
-                  throw new Error("Failed pattern match at Foliage.App.Component (line 73, column 17 - line 75, column 138): " + [v1.value0.value0.constructor.name]);
+                  throw new Error("Failed pattern match at Foliage.App.Component (line 74, column 17 - line 76, column 138): " + [v1.value0.value0.constructor.name]);
                 }
                 ;
-                throw new Error("Failed pattern match at Foliage.App.Component (line 68, column 15 - line 75, column 138): " + [v1.constructor.name]);
+                throw new Error("Failed pattern match at Foliage.App.Component (line 69, column 15 - line 76, column 138): " + [v1.constructor.name]);
               }))(function() {
                 return pure11(unit);
               });
@@ -12259,10 +12259,10 @@
           });
         }
         ;
-        throw new Error("Failed pattern match at Foliage.App.Component (line 77, column 29 - line 83, column 18): " + [v.value0.constructor.name]);
+        throw new Error("Failed pattern match at Foliage.App.Component (line 78, column 29 - line 84, column 18): " + [v.value0.constructor.name]);
       }
       ;
-      throw new Error("Failed pattern match at Foliage.App.Component (line 47, column 18 - line 83, column 18): " + [v.constructor.name]);
+      throw new Error("Failed pattern match at Foliage.App.Component (line 48, column 18 - line 84, column 18): " + [v.constructor.name]);
     };
     var $$eval = mkEval({
       handleQuery: defaultEval.handleQuery,

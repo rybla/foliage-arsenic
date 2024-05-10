@@ -549,12 +549,12 @@ compareTerm (OppositeLatticeType lty) t1 t2 =
         EQ /\ sigma -> EQ /\ sigma # pure
         GT /\ sigma -> LT /\ sigma # pure
 
-compareTerm (DiscreteLatticeType lty) t1 t2 =
+compareTerm (FlatLatticeType lty) t1 t2 =
   compareTerm lty t1 t2
     >>= case _ of
-        LT /\ _sigma -> throwError_compareTerm (DiscreteLatticeType lty) t1 t2
+        LT /\ _sigma -> throwError_compareTerm (FlatLatticeType lty) t1 t2
         EQ /\ sigma -> EQ /\ sigma # pure
-        GT /\ _sigma -> throwError_compareTerm (DiscreteLatticeType lty) t1 t2
+        GT /\ _sigma -> throwError_compareTerm (FlatLatticeType lty) t1 t2
 
 compareTerm (PowerLatticeType lty) t1 t2 = Unsafe.todo "compareTerm PowerLatticeType"
 
