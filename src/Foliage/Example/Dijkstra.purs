@@ -256,7 +256,7 @@ data Graph
 compileGraph :: Graph -> Array (FixedName /\ Rule)
 compileGraph (Graph { start_node: n, edges: es }) =
   Array.cons
-    ( FixedName (show n <> " ⇔ " <> show n)
+    ( FixedName ("dist " <> "[" <> show n <> " ⇒ " <> show n <> "]")
         /\ Rule
             { hypotheses: Nil
             , conclusion: Prop (name `Homo.get` _.dist) ((LiteralTerm (show n) (NamedDataType (name `Homo.get` _.int)) `PairTerm` LiteralTerm (show n) (NamedDataType (name `Homo.get` _.int))) `PairTerm` LiteralTerm (show 0) (NamedDataType (name `Homo.get` _.int)))

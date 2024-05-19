@@ -124,8 +124,8 @@ assoc =
       input :: Array String
       input = "x+x+x" # CodeUnits.toCharArray # map (pure >>> CodeUnits.fromCharArray)
 
-      latticeTypeDefs = [ name."Ast" /\ LatticeTypeDef ((ltyAst `prod12` ltyAst) `sumLir` ltyUnit) ]
-      -- latticeTypeDefs = [ name."Ast" /\ LatticeTypeDef ((ltyAst `prod12` ltyAst) `sumLgtr` ltyUnit) ]
+      -- latticeTypeDefs = [ name."Ast" /\ LatticeTypeDef ((ltyAst `prod12` ltyAst) `sumLir` ltyUnit) ]
+      latticeTypeDefs = [ name."Ast" /\ LatticeTypeDef ((ltyAst `prod12` ltyAst) `sumLgtr` ltyUnit) ]
       -- latticeTypeDefs = [ name."Ast" /\ LatticeTypeDef ((ltyAst `prod12` ltyAst) `sumLltr` ltyUnit) ]
 
       renderAst :: Term -> RenderM Htmls

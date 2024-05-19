@@ -36,24 +36,24 @@ example :: Lazy Module
 example =
   Lazy.defer \_ ->
     let
-      input_str /\ input = "@0" /\ term_Var (LiteralTerm "0" dty_Int)
+      -- input_str /\ input = "@0" /\ term_Var (LiteralTerm "0" dty_Int)
       -- input_str /\ input = "λ @0" /\ term_Lam (term_Var (LiteralTerm "0" dty_Int))
       -- input_str /\ input = "λ λ @0" /\ term_Lam (term_Lam (term_Var (LiteralTerm "0" dty_Int))) -- ignore
       -- input_str /\ input = "λ λ @1" /\ term_Lam (term_Lam (term_Var (LiteralTerm "1" dty_Int))) -- const
-      -- input_str /\ input =
-      --   -- (fun f => fun x => f x) (fun x => x) (fun x => x) : a -> a 
-      --   "((λ λ (@0 @1) λ @0) λ @0)" /\
-      --   term_Lam
-      --     ( term_Lam
-      --         ( term_Var (LiteralTerm "1" dty_Int)
-      --             `term_App`
-      --               term_Var (LiteralTerm "0" dty_Int)
-      --         )
-      --     )
-      --     `term_App`
-      --       (term_Lam (term_Var (LiteralTerm "0" dty_Int)))
-      --     `term_App`
-      --       (term_Lam (term_Var (LiteralTerm "0" dty_Int)))
+      input_str /\ input =
+        -- (fun f => fun x => f x) (fun x => x) (fun x => x) : a -> a 
+        "((λ λ (@0 @1) λ @0) λ @0)" /\
+        term_Lam
+          ( term_Lam
+              ( term_Var (LiteralTerm "1" dty_Int)
+                  `term_App`
+                    term_Var (LiteralTerm "0" dty_Int)
+              )
+          )
+          `term_App`
+            (term_Lam (term_Var (LiteralTerm "0" dty_Int)))
+          `term_App`
+            (term_Lam (term_Var (LiteralTerm "0" dty_Int)))
     -- input_str /\ input = "(@1 @0)" /\ term_Var (LiteralTerm "1" dty_Int) `term_App` term_Var (LiteralTerm "0" dty_Int)
     in
       Module
